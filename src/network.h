@@ -1,7 +1,6 @@
 // Automatically generated header.
 
 #pragma once
-#include <sys/_endian.h>
 #include <sys/fcntl.h>
 #include <sys/poll.h>
 #include <stdlib.h>

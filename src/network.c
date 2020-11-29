@@ -1,4 +1,3 @@
-#include <sys/_endian.h>
 #include <sys/fcntl.h>
 #include <sys/poll.h>
 
@@ -36,7 +35,7 @@ int resolve(char* node, int proto, unsigned short port, struct sockaddr_storage*
 	hints.ai_family = AF_INET;
 	hints.ai_protocol = proto;
 	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_NUMERICSERV;
+	hints.ai_flags = AI_NUMERICSERV | AI_PASSIVE;
 
 	struct addrinfo *res;
 	char* portstr = heapstr("%i", port);

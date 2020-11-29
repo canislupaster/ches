@@ -14,10 +14,13 @@ add_custom_target(genheader_termchess WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_D
 add_dependencies(termchess genheader_termchess corecommon)
 add_dependencies(termchess_server genheader_termchess corecommon)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 set(CURSES_NEED_NCURSES TRUE)
 set(CURSES_NEED_WIDE TRUE)
 
-find_package(Curses REQUIRED)
+find_package(Curses QUIET)
 include_directories(${CURSES_INCLUDE_DIR})
-target_link_libraries(termchess ${CURSES_LIBRARIES} corecommon)
-target_link_libraries(termchess_server corecommon)
+target_link_libraries(termchess ${CURSES_LIBRARIES} corecommon Threads::Threads)
+target_link_libraries(termchess_server corecommon Threads::Threads)
