@@ -82,10 +82,10 @@ server_t start_server(int port) {
 	struct sockaddr_storage addr;
 	socklen_t addrlen;
 
-	if (!resolve(NULL, IPPROTO_TCP, port, &addr, &addrlen)) errx(errno, "could not resolve server address");
+	if (!resolve(NULL, IPPROTO_TCP, port, &addr, &addrlen)) perrorx("could not resolve server address");
 
 	if (bind(sock, (struct sockaddr*)&addr, addrlen)==-1)
-		errx(errno, "could not start listener");
+		perrorx("could not start listener");
 
 	listen(sock, 10);
 	struct pollfd pfd = {.fd=sock, .events=POLLIN};
@@ -155,17 +155,17 @@ client_t client_connect(char* serv, int port) {
 	socklen_t addrlen;
 
 	if (!resolve(serv, IPPROTO_TCP, port, &addr, &addrlen))
-		errx(errno, "could not resolve server");
+		perrorx("could not resolve server");
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (connect(sock, (struct sockaddr*)&addr, addrlen)==-1)
-		errx(errno, "could not connect to server");
+		perrorx("could not connect to server");
 
 	return (client_t){.fd=sock, .wfd=sock};
 }
 
 void client_send(client_t* client, vector_t* d) {
-	if (write(client->wfd, &d->length, sizeof(unsigned))==-1 || write(client->wfd, d->data, d->length)==-1) errx(errno, "couldnt send to server");
+	if (write(client->wfd, &d->length, sizeof(unsigned))==-1 || write(client->wfd, d->data, d->length)==-1) perrorx("couldnt send to server");
 }
 
 cur_t client_recv(client_t* client) {
@@ -206,7 +206,7 @@ void write_int(vector_t* bytes, int x) {
 }
 
 void write_uint(vector_t* bytes, unsigned x) {
-	write_int(bytes, *(int*)&x);
+	write_int(bytes, *((int*)&x));
 }
 
 void write_str(vector_t* bytes, char* str) {
@@ -230,7 +230,7 @@ int read_int(cur_t* cur) {
 
 unsigned read_uint(cur_t* cur) {
 	int x = read_int(cur);
-	return *(unsigned*)&x;
+	return *((unsigned*)&x);
 }
 
 unsigned char read_uchr(cur_t* cur) {
