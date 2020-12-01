@@ -91,11 +91,11 @@ void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2])	{
 	}
 
 	if (rot>0 && rot<3) {
-		pos_out[0] = (rot%2==1?g->board_h:g->board_w)-1-pos_out[0];
+		pos_out[1] = (rot%2==1?g->board_w:g->board_h)-1-pos_out[1];
 	}
 
-	if (rot>0 && rot!=3) {
-		pos_out[1] = (rot%2==1?g->board_w:g->board_h)-1-pos_out[1];
+	if (rot>1) {
+		pos_out[0] = (rot%2==1?g->board_h:g->board_w)-1-pos_out[0];
 	}
 }
 
@@ -108,9 +108,12 @@ void rot_pos(int rot, int pos[2], int pos_out[2])	{
 		pos_out[1] = pos[1];
 	}
 
+	if (rot>0 && rot<3) {
+		pos_out[1] *= -1;
+	}
+
 	if (rot>1) {
 		pos_out[0] *= -1;
-		pos_out[1] *= -1;
 	}
 }
 

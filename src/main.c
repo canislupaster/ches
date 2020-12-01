@@ -411,7 +411,7 @@ void render(chess_client_t* client) {
 		}
 
 		move(y_margin+txt_pos[1],txt_pos[0]+x_margin);
-		attr_set(A_NORMAL, 1 + ((txt_pos[0]+txt_pos[1])%2)*NUM_FGS + player_col(t_iter.i-1), NULL);
+		attr_set(A_NORMAL, 1 + abs((txt_pos[0]+txt_pos[1])%2)*NUM_FGS + player_col(t_iter.i-1), NULL);
 
 		if (won) addstr( "👑");
 		if (client->mode==mode_multiplayer) addstr(p->joined ? "+" : "-");
@@ -419,7 +419,6 @@ void render(chess_client_t* client) {
 
 		if (turn) addstr("'s turn");
 	}
-
 
 	refresh();
 }
