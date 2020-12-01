@@ -8,6 +8,7 @@
 #include "hashtable.h"
 typedef enum {
 	p_empty,
+	p_blocked,
 	p_king,
 	p_queen,
 	p_rook,
@@ -36,9 +37,11 @@ typedef struct {
 	int board_rot;
 	int check, mate;
 
-	piece_t* king;
+	int king;
 	char* name;
 	int joined;
+
+	vector_t allies;
 } player_t;
 typedef struct {
 	int board_w, board_h;
@@ -51,7 +54,7 @@ typedef struct {
 	piece_t piece_swap; //emulating moves is needed when evaluating possible moves or creating a game tree, maybe later augment into a stack
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
-void board_pos(game_t* g, int pos[2], piece_t* ptr);
+void board_pos_i(game_t* g, int pos[2], int i);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 void rot_pos(int rot, int pos[2], int pos_out[2]);
 char* piece_str(piece_t* p);
@@ -64,7 +67,7 @@ enum {
 	move_success
 } make_move(game_t* g, move_t* m, int validate, char player);
 int clamp(int x, int min, int max);
-game_t default_chess();
+game_t parse_board(char* str);
 typedef enum {
 	mode_menu,
 	mode_singleplayer,

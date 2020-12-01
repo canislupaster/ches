@@ -1,0 +1,19 @@
+0 White
+2 Black
+3 Gray
+1 Blue
+
+A  A  A  1R 1N 1B 1Q 1K 1B 1N 1R A  A  A
+A  A  A  1P↓1P↓1P↓1P↓1P↓1P↓1P↓1P↓A  A  A
+A  A  A                          A  A  A
+2R 2P→                              3P←3R
+2N 2P→                              3P←3N
+2B 2P→                              3P←3B
+2Q 2P→                              3P←3Q
+2K 2P→                              3P←3K
+2B 2P→                              3P←3B
+2N 2P→                              3P←3N
+2R 2P→                              3P←3R
+A  A  A                          A  A  A
+A  A  A  0P↑0P↑0P↑0P↑0P↑0P↑0P↑0P↑A  A  A
+A  A  A  0R 0N 0B 0Q 0K 0B 0N 0R A  A  A

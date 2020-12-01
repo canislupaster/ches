@@ -7,6 +7,7 @@
 
 typedef enum {
 	p_empty,
+	p_blocked,
 	p_king,
 	p_queen,
 	p_rook,
@@ -39,9 +40,11 @@ typedef struct {
 	int board_rot;
 	int check, mate;
 
-	piece_t* king;
+	int king;
 	char* name;
 	int joined;
+
+	vector_t allies;
 } player_t;
 
 typedef struct {
@@ -60,10 +63,17 @@ piece_t* board_get(game_t* g, int x[2]) {
 	return vector_get(&g->board, g->board_w*x[1] + x[0]);
 }
 
-void board_pos(game_t* g, int pos[2], piece_t* ptr) {
-	int i = (int)(((char*)ptr-g->board.data)/g->board.size);
+int piece_i(game_t* g, piece_t* ptr) {
+	return (int)(((char*)ptr-g->board.data)/g->board.size);
+}
+
+void board_pos_i(game_t* g, int pos[2], int i) {
 	pos[0] = i%g->board_w;
 	pos[1] = i/g->board_w;
+}
+
+void board_pos(game_t* g, int pos[2], piece_t* ptr) {
+	board_pos_i(g, pos, piece_i(g, ptr));
 }
 
 void pawn_dir(int dir[2], piece_flags_t flags) {
@@ -80,9 +90,12 @@ void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2])	{
 		pos_out[1] = pos[1];
 	}
 
-	if (rot>1) {
-		pos_out[0] = g->board_w-1-pos_out[0];
-		pos_out[1] = g->board_h-1-pos_out[1];
+	if (rot>0 && rot<3) {
+		pos_out[0] = (rot%2==1?g->board_h:g->board_w)-1-pos_out[0];
+	}
+
+	if (rot>0 && rot!=3) {
+		pos_out[1] = (rot%2==1?g->board_w:g->board_h)-1-pos_out[1];
 	}
 }
 
@@ -102,12 +115,12 @@ void rot_pos(int rot, int pos[2], int pos_out[2])	{
 }
 
 char* piece_str(piece_t* p) {
-	char* pcs[] = {" ","♚","♛","♜","♝","♞","♟"};
+	char* pcs[] = {" ","█","♚","♛","♜","♝","♞","♟"};
 	return pcs[p->ty];
 }
 
 int player_col(char p) {
-	return p % 2;
+	return p % 4;
 }
 
 struct pawn_adj {int adj[2][2];} pawn_adjacent(int dir[2]) {
@@ -130,6 +143,7 @@ int valid_move(game_t* g, move_t* m) {
 	piece_t* p = board_get(g, m->from);
 	int collision=1;
 	switch (p->ty) {
+		case p_blocked:
 		case p_empty: return 0;
 		case p_bishop: {
 			if (!h || !v) return 0;
@@ -214,7 +228,7 @@ void move_swap(game_t* g, piece_t* from, piece_t* to) {
 	from->ty = p_empty;
 
 	if (to->ty==p_king) {
-		((player_t*)vector_get(&g->players, to->player))->king = to;
+		((player_t*)vector_get(&g->players, to->player))->king = piece_i(g, to);
 	} else if (to->ty == p_pawn) {
 		to->flags &= ~pawn_firstmv;
 		to->flags |= pawn_firstmv_swp;
@@ -223,7 +237,7 @@ void move_swap(game_t* g, piece_t* from, piece_t* to) {
 
 void unmove_swap(game_t* g, piece_t* from, piece_t* to) {
 	if (to->ty==p_king) {
-		((player_t*)vector_get(&g->players, to->player))->king = from;
+		((player_t*)vector_get(&g->players, to->player))->king = piece_i(g, from);
 	} else if (to->ty == p_pawn && to->flags & pawn_firstmv_swp) {
 		to->flags &= ~pawn_firstmv_swp;
 		to->flags |= pawn_firstmv;
@@ -241,6 +255,7 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 	board_pos(g,pos,p);
 
 	switch (p->ty) {
+		case p_blocked:
 		case p_empty: return;
 		case p_bishop:
 		case p_rook:
@@ -314,14 +329,14 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 	vector_iterator mv_iter = vector_iterate(moves);
 	while (vector_next(&mv_iter)) {
 		piece_t* pt = *(piece_t**)mv_iter.x;
-		if (pt->ty != p_empty && pt->player==p->player) {
+		if ((pt->ty != p_empty && pt->player==p->player) || pt->ty==p_blocked) {
 			vector_remove(moves, mv_iter.i-1);
 			mv_iter.i--;
 			continue;
 		}
 
 		move_swap(g, p, pt);
-		int end = endangered(g, t->king);
+		int end = endangered(g, vector_get(&g->board, t->king));
 		unmove_swap(g, p, pt);
 
 		if (end) {
@@ -368,13 +383,14 @@ enum {
 	piece_t* to = board_get(g, m->to);
 
 	if (validate) {
-		if (to->ty != p_empty && to->player == player) return move_invalid;
+		if (to->ty == p_blocked || (to->ty != p_empty && to->player == player))
+			return move_invalid;
 		if (!valid_move(g, m)) return move_invalid;
 	}
 
 	move_swap(g, from, to);
 
-	if (validate && endangered(g, t->king)) {
+	if (validate && endangered(g, vector_get(&g->board, t->king))) {
 		unmove_swap(g, from, to);
 		return move_invalid;
 	}
@@ -383,7 +399,7 @@ enum {
 	vector_iterator t_iter = vector_iterate(&g->players);
 	while (vector_next(&t_iter)) {
 		player_t* t2 = t_iter.x;
-		if (endangered(g, t2->king)) {
+		if (endangered(g, vector_get(&g->board, t2->king))) {
 			t2->check=1;
 			t2->mate = check_mate(g, (char)(t_iter.i-1));
 		}
@@ -409,36 +425,134 @@ int clamp(int x, int min, int max) {
 	return x<min?min:(x>=max?(max-1):x);
 }
 
-game_t default_chess() {
+game_t parse_board(char* str) {
 	game_t g;
 	g.board = vector_new(sizeof(piece_t));
-	g.board_w = 8;
-	g.board_h = 8;
+	g.players = vector_new(sizeof(player_t));
 
-	vector_populate(&g.board, g.board_w*g.board_h, &(piece_t){.ty=p_empty});
+	g.board_w = 0;
+	g.board_h = 0;
 
-	piece_ty setup[] = {p_rook, p_knight, p_bishop, p_queen, p_king, p_bishop, p_knight, p_rook,
-			p_pawn, p_pawn,   p_pawn,   p_pawn,  p_pawn, p_pawn,   p_pawn,   p_pawn};
-	int king = 4;
+	while (*str != '\n') {
+		if (skip_name(&str, "Alliance")) {
+			skip_ws(&str);
+			char* start = str;
+			skip_until(&str, "\n");
+			char* end1 = str++;
+			skip_until(&str, "\n");
 
-	for (int i=0;i<16;i++) {
-		vector_setcpy(&g.board, i, &(piece_t){.ty=setup[i], .flags=pawn_firstmv | pawn_y, .player=1});
+			char p_i[2];
+
+			vector_iterator p_iter = vector_iterate(&g.players);
+			while (vector_next(&p_iter)) {
+				player_t* p = p_iter.x;
+				if (strlen(p->name)==end1-start && strncmp(start, p->name, end1-start)==0) {
+					p_i[0]=(char)(p_iter.i-1);
+				} else if (strlen(p->name)==str-end1+1 && strncmp(end1+1, p->name, str-end1-1)==0) {
+					p_i[1]=(char)(p_iter.i-1);
+				}
+			}
+
+			vector_pushcpy(&((player_t*)vector_get(&g.players, p_i[0]))->allies, &p_i[1]);
+			vector_pushcpy(&((player_t*)vector_get(&g.players, p_i[1]))->allies, &p_i[0]);
+			str++; continue;
+		}
+
+		int rot;
+		parse_num(&str, &rot);
+		skip_ws(&str);
+
+		char* start = str;
+		skip_until(&str, "\n");
+		vector_pushcpy(&g.players, &(player_t){.name=heapcpysubstr(start, str-start), .board_rot=rot, .joined=0});
+		str++;
 	}
 
-	for (int i=0;i<16;i++) {
-		vector_setcpy(&g.board, g.board.length-(2*g.board_w) + i, &(piece_t){.ty=setup[(8+i)%16], .flags=pawn_firstmv | pawn_y | pawn_ny, .player=0});
+	str++;
+
+	int row_wid=0;
+	while (*str) {
+		if (skip_char(&str, '\n')) {
+			for (;row_wid<g.board_w; row_wid++)
+				vector_pushcpy(&g.board, &(piece_t){.ty=p_empty});
+
+			if (row_wid>g.board_w) {
+				for (int y=g.board_h-1; y>=0; y--) {
+					vector_insertcpy(&g.board, g.board_w*y, &(piece_t){.ty=p_empty});
+				}
+
+				g.board_w=row_wid;
+			}
+
+			g.board_h++;
+			row_wid=0;
+
+			continue;
+		}
+
+		piece_t* p = vector_push(&g.board);
+		row_wid++;
+
+		if (skip_name(&str, "   ")) {
+			p->ty = p_empty;
+			continue;
+		} else {
+			while (*str==' ') str++;
+		}
+
+		if (skip_char(&str, 'A')) {
+			p->ty = p_blocked;
+			p->player=0;
+			continue;
+		}
+
+		int player;
+		parse_num(&str, &player);
+		p->player = (char)player;
+
+		switch (*str) {
+			case 'P': {
+				str++;
+				p->ty = p_pawn;
+				if (skip_name(&str, "←")) p->flags=pawn_x|pawn_nx;
+				else if (skip_name(&str, "↑")) p->flags=pawn_y|pawn_ny;
+				else if (skip_name(&str, "→")) p->flags=pawn_x;
+				else if (skip_name(&str, "↓")) p->flags=pawn_y;
+				else if (skip_name(&str, "↖")) p->flags=pawn_y|pawn_ny|pawn_x|pawn_nx;
+				else if (skip_name(&str, "↗")) p->flags=pawn_y|pawn_ny|pawn_x;
+				else if (skip_name(&str, "↙")) p->flags=pawn_y|pawn_x|pawn_nx;
+				else if (skip_name(&str, "↘")) p->flags=pawn_y|pawn_x;
+
+				p->flags |= pawn_firstmv;
+
+				str--;
+				break;
+			}
+			case 'K': {
+				p->ty = p_king;
+				player_t* t = vector_get(&g.players, p->player);
+				if (t) t->king = (int)g.board.length-1;
+				break;
+			}
+			case 'Q': p->ty=p_queen; break;
+			case 'B': p->ty=p_bishop; break;
+			case 'N': p->ty=p_knight; break;
+			case 'R': p->ty=p_rook; break;
+		}
+
+		str++;
 	}
 
 	g.moves = vector_new(sizeof(move_t));
-
-	g.players = vector_new(sizeof(player_t));
 	g.player = 0;
 	g.won=0;
 
-	player_t* w = vector_pushcpy(&g.players, &(player_t){.board_rot=0, .joined=0, .name=heapcpystr("White")});
-	w->king = vector_get(&g.board, g.board.length-g.board_w+king);
-	player_t* b = vector_pushcpy(&g.players, &(player_t){.board_rot=2, .joined=0, .name=heapcpystr("Black")});
-	b->king = vector_get(&g.board, king);
+	vector_iterator p_iter = vector_iterate(&g.players);
+	while (vector_next(&p_iter)) {
+		player_t* p = p_iter.x;
+		p->mate=0;
+		p->check=endangered(&g, vector_get(&g.board, p->king));
+	}
 
 	return g;
 }
@@ -492,6 +606,10 @@ void write_players(vector_t* data, game_t* g) {
 		write_int(data, p->mate);
 		write_int(data, p->joined);
 		write_str(data, p->name);
+
+		vector_pushcpy(data, &(char){(char)p->allies.length});
+		vector_iterator a_iter = vector_iterate(&p->allies);
+		while (vector_next(&a_iter)) vector_pushcpy(data, a_iter.x);
 	}
 }
 
@@ -509,6 +627,13 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 		p->joined = read_int(cur);
 		if (joined && p->joined) *joined = i;
 		p->name = read_str(cur);
+
+		p->allies = vector_new(1);
+		char len = read_chr(cur);
+		for (char k=0; k<len; k++) {
+			char ally = read_chr(cur);
+			vector_pushcpy(&p->allies, &ally);
+		}
 	}
 }
 
@@ -537,7 +662,7 @@ void read_board(cur_t* cur, game_t* g) {
 		p->player = read_chr(cur);
 
 		if (p->ty == p_king) {
-			((player_t*)vector_get(&g->players, p->player))->king = p;
+			((player_t*)vector_get(&g->players, p->player))->king = piece_i(g, p);
 		}
 	}
 }

@@ -10,21 +10,20 @@
 #include "vector.h"
 #include "threads.h"
 #include "hashtable.h"
+#include "tinydir.h"
 
 const int NUM_BGS=5;
 const short BGS[5] = {COLOR_RED, COLOR_GREEN, COLOR_BLUE, COLOR_MAGENTA, COLOR_YELLOW};
-const int NUM_FGS=2;
-const short FGS[2] = {COLOR_WHITE, COLOR_BLACK};
+const int NUM_FGS=4;
+const short FGS[4] = {COLOR_WHITE, COLOR_BLACK, COLOR_BLACK+8, COLOR_CYAN};
 
 chess_client_t g_client;
 
 void center(chess_client_t* client, int row, char* txt) {
-	move(row,0);
 	attr_t a;
 	short c;
 	attr_get(&a, &c, NULL);
-	attr_set(A_INVIS, 0, NULL);
-	for (int i=0; i<client->centerx-strlen(txt)/2; i++) addch(' ');
+	move(row,client->centerx-strlen(txt)/2);
 	attr_set(a, c, NULL);
 	addstr(txt);
 }
@@ -88,17 +87,43 @@ int selectui(chess_client_t* client, char* prompt, vector_t* options) {
 }
 
 void setup_game(chess_client_t* client, client_mode_t mode, char* name) {
-	char* chess_modes[] = {"default"};
-	int i = selectui(client, "chess", &(vector_t){.data=(char*)chess_modes, .size=sizeof(char*), .length=1});
+	vector_t boards = vector_new(sizeof(char*));
+	vector_t boards_path = vector_new(sizeof(char*));
 
-	client->g = default_chess();
+	tinydir_dir dir;
+	tinydir_file file;
 
-	srand(time(NULL));
-	client->player = mode==mode_multiplayer ? (char)(rand()%2) : 0;
+	tinydir_open(&dir, "./");
+	for (; dir.has_next; tinydir_next(&dir)) {
+		tinydir_readfile(&dir, &file);
+		if (streq(file.name, ".") || streq(file.name, "..") || streq(file.name, "./"))
+			continue;
+
+		if (streq(ext(file.name), ".board")) {
+			vector_pushcpy(&boards, &(char*){heapcpystr(file.name)});
+			vector_pushcpy(&boards_path, &(char*){heapcpystr(file.path)});
+		}
+	}
+
+	tinydir_close(&dir);
+
+	int i = selectui(client, "chess", &boards);
+	char* path = *(char**)vector_get(&boards_path, i);
+
+	char* str = read_file(path);
+	if (!str) alertui(client, "failed to read board");
+
+	client->g = parse_board(str);
+
+	vector_free_strings(&boards);
+	vector_free_strings(&boards_path);
+
+	srand(time(NULL)); //TODO: choice of player
+	client->player = 0;
 	player_t* t = vector_get(&client->g.players, client->player);
-	t->joined = 1;
+	if (mode==mode_multiplayer) t->joined = 1;
 	if (name) t->name = name;
-	board_pos(&client->g, client->select, t->king);
+	board_pos_i(&client->g, client->select, t->king);
 
 	g_client.select2[0] = -1;
 	g_client.which = 0;
@@ -128,8 +153,8 @@ void render(chess_client_t* client);
 
 void refresh_hints(chess_client_t* client) {
 	piece_t* p = board_get(&client->g, client->select);
+	vector_clear(&client->hints);
 	if (p->player==client->player) {
-		vector_clear(&client->hints);
 		piece_moves(&client->g, p, &client->hints);
 	}
 }
@@ -172,7 +197,7 @@ int chess_client_recv(void* arg) {
 			case mp_move_made: {
 				move_t m = read_move(&cur);
 				make_move(&client->g, &m, 0, client->g.player);
-				
+
 				refresh_hints(client);
 				break;
 			}
@@ -301,7 +326,7 @@ void setup_multiplayer(chess_client_t* client) {
 			drop(cur.start);
 
 			player_t* t = vector_get(&client->g.players, client->player);
-			board_pos(&client->g, client->select, t->king);
+			board_pos_i(&client->g, client->select, t->king);
 
 			g_client.select2[0] = -1;
 			g_client.which = 0;
@@ -330,43 +355,19 @@ void render(chess_client_t* client) {
 		refresh_margin();
 	}
 
-	clear();
+	erase();
 
 	curs_set(0);
-	echo();
+	noecho();
 
 	int x_margin = client->centerx-client->g.board_w/2;
 	int y_margin = client->centery-client->g.board_h/2;
 
 	player_t* t = vector_get(&client->g.players, client->player);
 
-	vector_iterator t_iter = vector_iterate(&client->g.players);
-	while (vector_next(&t_iter)) {
-		player_t* p = t_iter.x;
-		int txt_pos[2];
-		board_rot_pos(&client->g, (p->board_rot+t->board_rot) % 4, (int[2]){0,client->g.board_h}, txt_pos);
-		int won = client->g.won && t_iter.i-1==client->g.player;
-		int turn = t_iter.i-1==client->g.player;
-		int max = client->g.board_w-((int)(strlen(p->name)+turn*strlen("'s turn"))+(won+1))+1;
-		txt_pos[0] = clamp(txt_pos[0], 0, max>0?max:0);
-
-		attr_set(A_INVIS, 0, NULL);
-		move(y_margin+txt_pos[1],0);
-		for (int i=0; i<x_margin+txt_pos[0]; i++) addch(' ');
-		attr_set(A_NORMAL, 1 + ((txt_pos[0]+txt_pos[1])%2)*NUM_FGS + player_col(t_iter.i-1), NULL);
-
-		if (won) addstr( "👑");
-		addstr(p->joined ? "+" : "-");
-		addstr(p->name);
-
-		if (turn) addstr("'s turn");
-	}
-
 	int pos[2];
 	for (pos[1]=0; pos[1]<client->g.board_h; pos[1]++) {
-		attr_set(A_INVIS, 0, NULL);
-		move(y_margin+pos[1], 0);
-		for (int i=0; i<x_margin; i++) addch(' ');
+		move(y_margin+pos[1], x_margin);
 
 		for (pos[0]=0; pos[0]<client->g.board_w; pos[0]++) {
 			int bpos[2];
@@ -388,6 +389,37 @@ void render(chess_client_t* client) {
 			addstr(piece_str(p));
 		}
 	}
+
+	vector_iterator t_iter = vector_iterate(&client->g.players);
+	while (vector_next(&t_iter)) {
+		player_t* p = t_iter.x;
+		int txt_pos[2];
+
+		int rel_rot = p->board_rot-t->board_rot;
+		if (rel_rot<0) rel_rot=4+rel_rot;
+		rel_rot %= 4;
+
+		int won = client->g.won && t_iter.i-1==client->g.player;
+		int turn = t_iter.i-1==client->g.player;
+		int slen = (int)(strlen(p->name)+turn*strlen("'s turn"))+won+(client->mode==mode_multiplayer);
+
+		switch (rel_rot) {
+			case 0: txt_pos[0]=0; txt_pos[1]=client->g.board_h; break;
+			case 2: txt_pos[0]=client->g.board_w-slen; txt_pos[1]=-1; break;
+			case 1: txt_pos[0]=client->g.board_w; txt_pos[1]=client->g.board_h-1; break;
+			case 3: txt_pos[0]=-slen; txt_pos[1]=0; break;
+		}
+
+		move(y_margin+txt_pos[1],txt_pos[0]+x_margin);
+		attr_set(A_NORMAL, 1 + ((txt_pos[0]+txt_pos[1])%2)*NUM_FGS + player_col(t_iter.i-1), NULL);
+
+		if (won) addstr( "👑");
+		if (client->mode==mode_multiplayer) addstr(p->joined ? "+" : "-");
+		addstr(p->name);
+
+		if (turn) addstr("'s turn");
+	}
+
 
 	refresh();
 }
@@ -479,7 +511,10 @@ int main() {
 			g_client.select[0]+=off_out[0]; g_client.select[1]+=off_out[1];
 			g_client.select[0]=clamp(g_client.select[0],0,g_client.g.board_w);
 			g_client.select[1]=clamp(g_client.select[1],0,g_client.g.board_h);
-			if (mouse) g_client.which++; //"enter" after click
+			if (mouse) {
+				g_client.which++; //"enter" after click
+				mouse=0;
+			}
 
 			vector_clear(&g_client.hints);
 
