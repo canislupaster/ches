@@ -1,5 +1,10 @@
 #include <stdio.h>
+#ifdef _WIN32
+#define PDC_NCMOUSE
+#include <curses.h>
+#else
 #include <ncurses.h>
+#endif
 #include <locale.h>
 #include <signal.h>
 
@@ -270,7 +275,7 @@ void setup_multiplayer(chess_client_t* client) {
 		client_send(&client->server, &(vector_t){.data=(char[]){(char)mp_list_game}, .length=1});
 
 		cur_t resp = client_recv(&client->server);
-		if (resp.err || (mp_serv_t)read_chr(&resp) != mp_game_list) errx(0, "game list not returned");
+		if (resp.err || (mp_serv_t)read_chr(&resp) != mp_game_list) errx("game list not returned");
 		unsigned games = read_uint(&resp);
 		vector_t game_names = vector_new(sizeof(char*));
 		for (unsigned i=0; i<games; i++) {
@@ -303,7 +308,7 @@ void setup_multiplayer(chess_client_t* client) {
 			client_send(&client->server, &data);
 
 			cur_t cur = client_recv(&client->server);
-			if (cur.err || (mp_serv_t)read_chr(&cur) != mp_game_made) errx(0, "game failed to create");
+			if (cur.err || (mp_serv_t)read_chr(&cur) != mp_game_made) errx("game failed to create");
 			drop(cur.start);
 		} else {
 			vector_pushcpy(&data, &(char){(char)mp_join_game});
@@ -319,7 +324,7 @@ void setup_multiplayer(chess_client_t* client) {
 			} else if (msg == mp_game) {
 				full=0;
 			} else {
-				errx(0, "server did not send the game");
+				errx("server did not send the game");
 			}
 
 			read_game(&cur, client);
@@ -423,15 +428,7 @@ void render(chess_client_t* client) {
 	refresh();
 }
 
-void resize_handler(int sig) {
-	endwin();
-	refresh();
-	refresh_margin();
-
-	if (g_client.mode != mode_menu) render(&g_client);
-}
-
-int main() {
+int main(int argc, char** argv) {
 	g_client.mode = mode_menu;
 	g_client.cfg = init_cfg();
 
@@ -443,11 +440,6 @@ int main() {
 	curs_set(0);
 	timeout(-1);
 	mousemask(ALL_MOUSE_EVENTS,NULL);
-
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(struct sigaction));
-	sa.sa_handler = resize_handler;
-	sigaction(SIGWINCH, &sa, NULL);
 
 	start_color();
 
@@ -474,6 +466,14 @@ int main() {
 
 		int mouse=0;
 		switch (ch) {
+			case KEY_RESIZE: {
+				endwin();
+				refresh();
+				refresh_margin();
+
+				if (g_client.mode != mode_menu) render(&g_client);
+				break;
+			}
 			case KEY_MOUSE: {
 				MEVENT mev;
 				getmouse(&mev);

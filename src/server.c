@@ -1,5 +1,3 @@
-#include <arpa/inet.h>
-
 #include "chess.h"
 #include "network.h"
 

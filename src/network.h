@@ -1,26 +1,45 @@
 // Automatically generated header.
 
 #pragma once
-#include <sys/fcntl.h>
-#include <sys/poll.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <limits.h>
-#include <unistd.h>
-#include <err.h>
 #include <errno.h>
-#include <pthread.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <ifaddrs.h>
-#include <netdb.h>
-#include <poll.h>
 #include <fcntl.h>
 #include <signal.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+#ifdef _WIN32
+#include <WS2tcpip.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+#ifndef _WIN32
+#include <poll.h>
+#endif
+#ifndef _WIN32
+#include <sys/socket.h>
+#endif
+#ifndef _WIN32
+#include <netinet/in.h>
+#endif
+#ifndef _WIN32
+#include <arpa/inet.h>
+#endif
+#ifndef _WIN32
+#include <ifaddrs.h>
+#endif
+#ifndef _WIN32
+#include <netdb.h>
+#endif
 #include "vector.h"
 #include "hashtable.h"
 #include "util.h"
@@ -42,8 +61,10 @@ void server_send(server_t* serv, unsigned i, vector_t* data);
 typedef struct {
 	int fd;
 	//pipe wfd -> wfd_rd when using select; another thread can be writing
+#ifndef _WIN32
 	int wfd;
 	int wfd_rd;
+#endif
 } client_t;
 client_t client_connect(char* serv, int port);
 void client_send(client_t* client, vector_t* d);
@@ -55,6 +76,6 @@ void write_str(vector_t* bytes, char* str);
 void write_uchr(vector_t* bytes, unsigned char x);
 int read_int(cur_t* cur);
 unsigned read_uint(cur_t* cur);
-unsigned char read_uchr(cur_t* cur);
+char read_uchr(cur_t* cur);
 char read_chr(cur_t* cur);
 char* read_str(cur_t* cur);

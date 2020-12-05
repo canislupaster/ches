@@ -118,7 +118,11 @@ void rot_pos(int rot, int pos[2], int pos_out[2])	{
 }
 
 char* piece_str(piece_t* p) {
+#if _WIN32
+	char* pcs[] = {" ","█","K","Q","R","B","N","P"};
+#else
 	char* pcs[] = {" ","█","♚","♛","♜","♝","♞","♟"};
+#endif
 	return pcs[p->ty];
 }
 
