@@ -1,6 +1,16 @@
 #include "chess.h"
 #include "network.h"
 
+typedef struct {
+	server_t server;
+	vector_t games;
+	map_t num_joined;
+	vector_t num_lobby;
+
+	//filemap_t users;
+	//filemap_index_t users_ip;
+} chess_server_t;
+
 void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned num_exclude) {
 	vector_iterator num_iter = vector_iterate(nums);
 	while (vector_next(&num_iter)) {
@@ -11,6 +21,10 @@ void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned n
 }
 
 void leave_game(chess_server_t* cserv, unsigned i) {
+	if (vector_search(&cserv->num_lobby, &i)) {
+		return;
+	}
+
 	mp_game_t** mg_ref = map_find(&cserv->num_joined, &i);
 	if (!mg_ref) return;
 	mp_game_t* mg = *mg_ref;
@@ -30,8 +44,15 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 
 	map_remove(&cserv->num_joined, &i);
 
+	vector_t data = vector_new(1);
+	
 	if (!left) {
 		unsigned g_i = vector_search(&cserv->games, &mg)-1;
+
+		vector_pushcpy(&data, &(char){(char)mp_game_list_removed});
+		write_uint(&data, g_i);
+		broadcast(cserv, &cserv->num_lobby, &data, 0);
+
 		vector_remove(&cserv->games, g_i);
 
 		game_free(&mg->g);
@@ -39,16 +60,16 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		drop(mg->name);
 		drop(mg);
 	} else {
-		vector_t data = vector_new(1);
 		vector_pushcpy(&data, &(char){(char)mp_game_left});
 		vector_pushcpy(&data, &(char){p_i});
 		broadcast(cserv, &mg->player_num, &data, 0);
-		vector_free(&data);
 	}
+	
+	vector_free(&data);
 }
 
 int main(int argc, char** argv) {
-	chess_server_t cserv = {.server=start_server(MP_PORT), .games=vector_new(sizeof(mp_game_t*)), .num_joined=map_new()};
+	chess_server_t cserv = {.server=start_server(MP_PORT, 1), .games=vector_new(sizeof(mp_game_t*)), .num_joined=map_new(), .num_lobby=vector_new(sizeof(unsigned))};
 	map_configure_uint_key(&cserv.num_joined, sizeof(mp_game_t*));
 
 	unsigned i;
@@ -56,11 +77,14 @@ int main(int argc, char** argv) {
 
 	while (1) {
 		cur_t cur = server_recv(&cserv.server, &i);
+
 		mp_client_t op = mp_leave_game;
 		if (cur.start) op = (mp_client_t)read_chr(&cur);
 
 		switch (op) {
 			case mp_list_game: {
+				leave_game(&cserv, i);
+
 				vector_pushcpy(&resp, &(char){(char)mp_game_list});
 				write_uint(&resp, cserv.games.length);
 
@@ -70,6 +94,7 @@ int main(int argc, char** argv) {
 					write_str(&resp, g->name);
 				}
 
+				vector_pushcpy(&cserv.num_lobby, &i);
 				break;
 			}
 			case mp_make_game: {
@@ -95,6 +120,11 @@ int main(int argc, char** argv) {
 				vector_setcpy(&mg->player_num, (unsigned)joined, &i);
 
 				vector_pushcpy(&cserv.games, &mg);
+				
+				vector_pushcpy(&resp, &(char){(char)mp_game_list_new});
+				write_str(&resp, g_name);
+				broadcast(&cserv, &cserv.num_lobby, &resp, 0);
+				vector_clear(&resp);	
 
 				vector_pushcpy(&resp, &(char){(char)mp_game_made});
 
@@ -107,7 +137,7 @@ int main(int argc, char** argv) {
 				char* name = read_str(&cur);
 				if (cur.err) break;
 
-				if (g_i>cserv.games.length) {
+				if (g_i>=cserv.games.length) {
 					drop(name);
 					break;
 				}
@@ -169,6 +199,7 @@ int main(int argc, char** argv) {
 				leave_game(&cserv, i);
 				break;
 			}
+			default:;
 		}
 
 		if (cur.start) drop(cur.start);

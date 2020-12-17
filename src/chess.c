@@ -1,9 +1,8 @@
-#include "cfg.h"
-#include "filemap.h"
 #include "threads.h"
 #include "vector.h"
 #include "hashtable.h"
 #include "network.h"
+#include "cfg.h"
 
 typedef enum {
 	p_empty,
@@ -566,6 +565,7 @@ game_t parse_board(char* str) {
 
 typedef enum {
 	mode_menu,
+	mode_gamelist,
 	mode_singleplayer,
 	mode_multiplayer,
 } client_mode_t;
@@ -591,6 +591,9 @@ typedef enum {
 
 typedef enum {
 	mp_game_list, //unsigned games, game names
+	mp_game_list_new, //game name
+	mp_game_list_removed, //unsigned game
+
 	mp_game_full,
 	mp_game_made,
 
@@ -711,42 +714,218 @@ void game_free(game_t* g) {
 }
 
 typedef struct {
-	server_t server;
-	vector_t games;
-	map_t num_joined;
-
-	//filemap_t users;
-	//filemap_index_t users_ip;
-} chess_server_t;
-
-typedef struct {
-	map_t cfg;
 	client_mode_t mode;
 
-	client_t server;
-	game_t g;
-	int select[2];
-	int select2[2];
-	int which;
-	vector_t hints; //highlight pieces
-	char player;
+	client_t net;
+	union {
+		struct {
+			game_t g;
+			char player;
+		};
+
+		vector_t game_list;
+	};
 
 	int recv;
 	mtx_t lock;
 	thrd_t recv_thrd;
 
-	int centerx, centery;
+	vector_t hints; //highlight pieces
+	move_t select;
+
+	void (*render)(void*);
+	void* arg;
 } chess_client_t;
 
-const char* CFG_SERVADDR = "server";
-const char* CFG_NAME = "name";
-char* CFG_PATH = "termchess.txt";
+#define CHESS_TERM_TIMEOUT 1000
 
-map_t init_cfg() {
-	map_t cfg = map_new();
-	map_configure_string_key(&cfg, sizeof(config_val));
-	cfg_add(&cfg, CFG_SERVADDR, cfg_str, (cfg_data){.str=NULL});
-	cfg_add(&cfg, CFG_NAME, cfg_str, (cfg_data){.str=""});
-	configure(&cfg, CFG_PATH);
-	return cfg;
+void read_game(cur_t* cur, chess_client_t* client) {
+	client->g = (game_t){0};
+	read_players(cur, &client->g, NULL);
+	read_board(cur, &client->g);
+	read_moves(cur, &client->g);
+	client->player = read_chr(cur);
+	client->mode = mode_multiplayer;
+}
+
+//run whenever select changes or game update
+void refresh_hints(chess_client_t * client) {
+	piece_t* p = board_get(&client->g, client->select.from);
+	vector_clear(&client->hints);
+	if (!p) return;
+	if (p->player==client->player) {
+		piece_moves(&client->g, p, &client->hints);
+	}
+}
+
+int chess_client_recv(void* arg) {
+	chess_client_t* client = arg;
+
+	while (client->recv) {
+		printf("wait\n");
+		if (!client_recv_timeout(&client->net, CHESS_TERM_TIMEOUT)) continue;
+
+		if (mtx_trylock(&client->lock)==thrd_busy) continue;
+
+		cur_t cur = client_recv(&client->net);
+		if (cur.err!=0) {
+			perrorx("couldnt read from server");
+		}
+
+		mp_serv_t msg = (mp_serv_t)read_chr(&cur);
+
+		switch (msg) {
+			case mp_game: {
+				read_game(&cur, client);
+				break;
+			}
+			case mp_game_list_new: {
+				char* g_name = read_str(&cur);
+				vector_pushcpy(&client->game_list, &g_name);
+				break;
+			}
+			case mp_game_list_removed: {
+				drop(vector_removeptr(&client->game_list, read_uint(&cur)));
+				break;
+			}
+			case mp_game_joined: {
+				char player = read_chr(&cur);
+				player_t* p = vector_get(&client->g.players, (unsigned)player);
+				p->name = read_str(&cur);
+				p->joined = 1;
+				break;
+			}
+			case mp_game_left: {
+				char player = read_chr(&cur);
+				player_t* p = vector_get(&client->g.players, (unsigned)player);
+				p->joined = 0;
+				break;
+			}
+			case mp_move_made: {
+				move_t m = read_move(&cur);
+				make_move(&client->g, &m, 0, client->g.player);
+
+				refresh_hints(client);
+				break;
+			}
+			default:;
+		}
+
+		mtx_unlock(&client->lock);
+
+		client->render(client->arg);
+
+		drop(cur.start);
+	}
+
+	return 0;
+}
+
+void client_make_move(chess_client_t* client) {
+	if (client->player != client->g.player) return;
+
+	piece_t* p = board_get(&client->g, client->select.to);
+	if (vector_search(&client->hints, &p)!=0) {
+		make_move(&client->g, &client->select, 0, client->player);
+
+		//switch player or send move
+		if (client->mode==mode_singleplayer) {
+			client->player = client->g.player;
+		} else if (client->mode==mode_multiplayer) {
+			vector_t data = vector_new(1);
+			vector_pushcpy(&data, &(char){(char)mp_make_move});
+			write_move(&data, &client->select);
+
+			client_send(&client->net, &data);
+			vector_free(&data);
+		}
+
+		refresh_hints(client);
+	}
+}
+
+void chess_client_startrecv(chess_client_t* client) {
+	client->recv = 1;
+	thrd_create(&client->recv_thrd, chess_client_recv, client);
+}
+
+void chess_client_gamelist(chess_client_t* client) {
+	printf("gamelist lock\n");
+
+	client_send(&client->net, &(vector_t){.data=(char[]){(char)mp_list_game}, .length=1});
+
+	cur_t resp = client_recv(&client->net);
+	if (resp.err || (mp_serv_t)read_chr(&resp) != mp_game_list) errx("game list not returned");
+
+	unsigned games = read_uint(&resp);
+	client->game_list = vector_new(sizeof(char*));
+	for (unsigned i=0; i<games; i++) {
+		vector_pushcpy(&client->game_list, &(char*){read_str(&resp)});
+	}
+
+	drop(resp.start);
+}
+
+void chess_client_makegame(chess_client_t* client, char* g_name) {
+	vector_t data = vector_new(1);
+	
+	vector_pushcpy(&data, &(char){(char)mp_make_game});
+
+	write_str(&data, g_name);
+	write_players(&data, &client->g);
+	write_board(&data, &client->g);
+
+	client_send(&client->net, &data);
+
+	cur_t cur = client_recv(&client->net);
+
+	if (cur.err || (mp_serv_t)read_chr(&cur) != mp_game_made) errx("game failed to create");
+	drop(cur.start);
+	
+	vector_free(&data);
+}
+
+void chess_client_initgame(chess_client_t* client, char* name, client_mode_t mode) {
+	client->player = 0;
+	player_t* t = vector_get(&client->g.players, client->player);
+	if (mode==mode_multiplayer) t->joined = 1;
+	if (name) t->name = name;
+	board_pos_i(&client->g, client->select.from, t->king);
+
+	client->select.to[0] = -1;
+	client->hints = vector_new(sizeof(piece_t*));
+
+	client->mode = mode;
+}
+
+int chess_client_joingame(chess_client_t* client, unsigned i, char* name) {
+	vector_t data = vector_new(1);
+
+	vector_pushcpy(&data, &(char){(char)mp_join_game});
+	write_uint(&data, i);
+	write_str(&data, name);
+
+	client_send(&client->net, &data);
+
+	cur_t cur = client_recv(&client->net);
+	mp_serv_t msg = (mp_serv_t)read_chr(&cur);
+
+	if (msg == mp_game_full) {
+		return 0;
+	} else if (msg != mp_game) {
+		errx("server did not send the game");
+	}
+
+	read_game(&cur, client);
+	drop(cur.start);
+
+	player_t* t = vector_get(&client->g.players, client->player);
+	board_pos_i(&client->g, client->select.from, t->king);
+	client->select.to[0] = -1;
+
+	client->hints = vector_new(sizeof(piece_t*));
+
+	vector_free(&data);
+
+	return 1;
 }

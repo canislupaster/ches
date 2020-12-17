@@ -1,11 +1,10 @@
 // Automatically generated header.
 
 #pragma once
-#include "cfg.h"
-#include "filemap.h"
 #include "threads.h"
 #include "vector.h"
 #include "hashtable.h"
+#include "cfg.h"
 typedef enum {
 	p_empty,
 	p_blocked,
@@ -54,12 +53,10 @@ typedef struct {
 	piece_t piece_swap; //emulating moves is needed when evaluating possible moves or creating a game tree, maybe later augment into a stack
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
-void board_pos_i(game_t* g, int pos[2], int i);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 void rot_pos(int rot, int pos[2], int pos_out[2]);
 char* piece_str(piece_t* p);
 int player_col(char p);
-void piece_moves(game_t* g, piece_t* p, vector_t* moves);
 enum {
 	move_invalid,
 	move_turn,
@@ -70,6 +67,7 @@ int clamp(int x, int min, int max);
 game_t parse_board(char* str);
 typedef enum {
 	mode_menu,
+	mode_gamelist,
 	mode_singleplayer,
 	mode_multiplayer,
 } client_mode_t;
@@ -88,6 +86,9 @@ typedef enum {
 } mp_client_t;
 typedef enum {
 	mp_game_list, //unsigned games, game names
+	mp_game_list_new, //game name
+	mp_game_list_removed, //unsigned game
+
 	mp_game_full,
 	mp_game_made,
 
@@ -105,35 +106,34 @@ void read_board(cur_t* cur, game_t* g);
 void write_move(vector_t* data, move_t* m);
 move_t read_move(cur_t* cur);
 void write_moves(vector_t* data, game_t* g);
-void read_moves(cur_t* cur, game_t* g);
 void game_free(game_t* g);
 typedef struct {
-	server_t server;
-	vector_t games;
-	map_t num_joined;
-
-	//filemap_t users;
-	//filemap_index_t users_ip;
-} chess_server_t;
-typedef struct {
-	map_t cfg;
 	client_mode_t mode;
 
-	client_t server;
-	game_t g;
-	int select[2];
-	int select2[2];
-	int which;
-	vector_t hints; //highlight pieces
-	char player;
+	client_t net;
+	union {
+		struct {
+			game_t g;
+			char player;
+		};
+
+		vector_t game_list;
+	};
 
 	int recv;
 	mtx_t lock;
 	thrd_t recv_thrd;
 
-	int centerx, centery;
+	vector_t hints; //highlight pieces
+	move_t select;
+
+	void (*render)(void*);
+	void* arg;
 } chess_client_t;
-extern char* CFG_SERVADDR;
-extern char* CFG_NAME;
-extern char* CFG_PATH;
-map_t init_cfg();
+void refresh_hints(chess_client_t * client);
+void client_make_move(chess_client_t* client);
+void chess_client_startrecv(chess_client_t* client);
+void chess_client_gamelist(chess_client_t* client);
+void chess_client_makegame(chess_client_t* client, char* g_name);
+void chess_client_initgame(chess_client_t* client, char* name, client_mode_t mode);
+int chess_client_joingame(chess_client_t* client, unsigned i, char* name);
