@@ -48,7 +48,8 @@ typedef enum {
 	a_boardchange,
 	a_setmovecursor,
 	a_joingame,
-	a_select
+	a_select,
+	a_back
 } action_t;
 
 void handler(void* arg, cur_t cur) {
@@ -76,6 +77,42 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 					break;
 				}
 				default:;
+			}
+
+			break;
+		}
+		case a_back: {
+			switch (web->client.mode) {
+				case mode_menu: switch (web->menustate) { //triple-switch
+					case menu_makegame: {
+						web->client.mode = mode_gamelist; break;
+					}
+					case menu_connect:
+					case menu_chess_sp: {
+						web->menustate = menu_main; break;
+					}
+					default:;
+				} break;
+				case mode_gamelist: {
+					chess_client_disconnect(&web->client);
+					if (web->mp_name) drop(web->mp_name);
+					web->client.mode = mode_menu;
+					web->menustate = menu_main;
+					break;
+				}
+				case mode_singleplayer: {
+					chess_client_leavegame(&web->client);
+
+					web->client.mode = mode_menu;
+					web->menustate = menu_main;
+					break;
+				}
+				case mode_multiplayer: {
+					chess_client_leavegame(&web->client);
+					chess_client_gamelist(&web->client);
+					web->client.mode = mode_gamelist;
+					break;
+				}
 			}
 
 			break;
@@ -147,7 +184,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			if (html_checked("pawnpromotion"))
 				web->client.g.flags |= game_pawn_promotion;
 
-			chess_client_initgame(&web->client, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer);
+			chess_client_initgame(&web->client, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer, 1);
 			if (web->menustate==menu_makegame) chess_client_makegame(&web->client, gname, web->mp_name);
 			setup_game(web);
 			break;
@@ -195,6 +232,11 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 void render(html_ui_t* ui, chess_web_t* web) {
 	if (web->err) {
 		html_p(ui, "err", web->err);
+	}
+
+	if (web->client.mode!=mode_menu || web->menustate!=menu_main) {
+		html_elem_t* back = html_button(ui, "back", "back");
+		html_event(ui, back, html_click, a_back);
 	}
 
 	switch (web->client.mode) {
@@ -290,6 +332,30 @@ void render(html_ui_t* ui, chess_web_t* web) {
 		case mode_singleplayer: {
 			player_t* t = vector_get(&web->client.g.players, web->client.player);
 
+			if (web->client.mode == mode_multiplayer) {
+				if (web->client.spectating) {
+					html_p(ui, "spectating", "(spectating)");
+				}
+
+				html_start_div(ui, "spectators", 1);
+				vector_iterator spec_iter = vector_iterate(&web->client.g.spectators);
+				while (vector_next(&spec_iter)) {
+					html_span(ui, NULL, *(char**)spec_iter.x);
+					if (spec_iter.i!=web->client.g.spectators.length) {
+						html_span(ui, NULL, ", ");
+					}
+				}
+
+				if (web->client.g.spectators.length==1) {
+					html_span(ui, NULL, " is spectating");
+				} else if (web->client.g.spectators.length>1) {
+					html_span(ui, NULL, " are spectating");
+				}
+
+				html_end(ui);
+			}
+
+
 			html_start_div(ui, "wrapper", 1);
 			vector_iterator t_iter = vector_iterate(&web->client.g.players);
 			while (vector_next(&t_iter)) {
@@ -323,7 +389,13 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			vector_iterator move_iter = vector_iterate(&web->client.g.moves);
 			while (vector_next(&move_iter)) {
 				char* pgn = move_pgn(&web->client.g, move_iter.x);
-				html_event(ui, html_p(ui, NULL, pgn), html_click, a_setmovecursor);
+				html_elem_t* p = html_p(ui, NULL, pgn);
+				html_event(ui, p, html_click, a_setmovecursor);
+
+				if (move_iter.i-1 == web->client.move_cursor) {
+					html_set_attr(p, "style", "font-weight:bold;");
+				}
+
 				drop(pgn);
 			}
 

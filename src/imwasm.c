@@ -393,6 +393,10 @@ html_elem_t* html_p(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "p", id, text);
 }
 
+html_elem_t* html_span(html_ui_t* ui, char* id, char* text) {
+	return html_elem_new(ui, "span", id, text);
+}
+
 html_elem_t* html_label(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "label", id, text);
 }

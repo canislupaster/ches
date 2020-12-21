@@ -120,6 +120,7 @@ typedef struct {
 } client_t;
 client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* arg);
 void client_send(client_t* client, vector_t* d);
+void client_free(client_t* client);
 void write_int(vector_t* bytes, int x);
 void write_uint(vector_t* bytes, unsigned x);
 void write_str(vector_t* bytes, char* str);

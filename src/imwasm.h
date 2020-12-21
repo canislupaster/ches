@@ -79,6 +79,7 @@ html_elem_t* html_start_tr(html_ui_t* ui);
 html_elem_t* html_start_td(html_ui_t* ui);
 html_elem_t* html_img(html_ui_t* ui, char* id, char* src);
 html_elem_t* html_p(html_ui_t* ui, char* id, char* text);
+html_elem_t* html_span(html_ui_t* ui, char* id, char* text);
 html_elem_t* html_label(html_ui_t* ui, char* id, char* text);
 html_elem_t* html_button(html_ui_t* ui, char* id, char* text);
 html_elem_t* html_option(html_ui_t* ui, char* id, char* text);

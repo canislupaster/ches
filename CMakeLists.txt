@@ -59,7 +59,7 @@ if(EMSCRIPTEN)
     target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
     target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")
 
-    add_custom_command(TARGET termchess POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/termchess.wasm ${CMAKE_CURRENT_BINARY_DIR}/termchess.js ${CMAKE_SOURCE_DIR}/docs/)
+    add_custom_command(TARGET termchess POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/termchess.wasm ${CMAKE_CURRENT_BINARY_DIR}/termchess.cbp ${CMAKE_CURRENT_BINARY_DIR}/termchess.js ${CMAKE_SOURCE_DIR}/docs/)
 
     target_link_libraries(termchess corecommon)
 endif()
