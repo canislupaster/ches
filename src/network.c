@@ -41,6 +41,8 @@
 
 #include <ifaddrs.h>
 #include <netdb.h>
+
+#include "endian.h" //64 bit websocket lengths
 #endif
 
 #include "vector.h"
@@ -122,7 +124,7 @@ void write_frame(int fd, ws_opcode op, vector_t* data) {
 		} else if (data->length>125) {
 			hdr[1] = 127;
 			send(fd, hdr, 2, 0);
-			uint64_t l = htonll((uint64_t)data->length);
+			uint64_t l = htobe64((uint64_t)data->length);
 			send(fd, (char*)&l, 8, 0);
 		} else {
 			hdr[1] = (unsigned char)data->length;
@@ -157,7 +159,7 @@ void read_frame(server_msg_t* msg, int fd, char* hup) {
 	} else if (lenb==127) {
 		uint64_t x;
 		recv(fd, &x, 8, 0);
-		len = (unsigned)ntohll(x);
+		len = (unsigned)be64toh(x);
 	}
 
 	unsigned mask;
