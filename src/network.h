@@ -74,7 +74,7 @@
 #include <netdb.h>
 #endif
 #if !((defined(_WIN32)) || defined(__EMSCRIPTEN__))
-#include "endian.h"
+#include "portableendian.h"
 #endif
 #include "vector.h"
 #include "hashtable.h"

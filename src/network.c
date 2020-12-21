@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <signal.h>
+
 #ifndef __EMSCRIPTEN__
 #include <openssl/sha.h>
 #include <openssl/rand.h>
@@ -42,7 +43,7 @@
 #include <ifaddrs.h>
 #include <netdb.h>
 
-#include "endian.h" //64 bit websocket lengths
+#include "portableendian.h" //64 bit websocket lengths
 #endif
 
 #include "vector.h"
