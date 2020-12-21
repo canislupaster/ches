@@ -751,9 +751,9 @@ void write_moves(vector_t* data, game_t* g) {
 
 void read_moves(cur_t* cur, game_t* g) {
 	unsigned moves = read_uint(cur);
-	g->moves = vector_new(sizeof(moves));
+	g->moves = vector_new(sizeof(move_t));
 	for (unsigned i=0; i<moves; i++)
-		vector_pushcpy(&g->moves, (move_t[]){read_move(cur)});
+		vector_pushcpy(&g->moves, &(move_t[]){read_move(cur)});
 }
 
 void game_free(game_t* g) {
@@ -824,7 +824,7 @@ void chess_client_initgame(chess_client_t* client, client_mode_t mode) {
 	client->mode = mode;
 	if (mode==mode_singleplayer) client->player = 0;
 
-	client->move_cursor = 0;
+	client->move_cursor = client->g.moves.length;
 	client->hints = vector_new(sizeof(piece_t*));
 }
 
