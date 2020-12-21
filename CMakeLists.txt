@@ -42,10 +42,7 @@ if(UNIX)
     target_link_libraries(termchess_server Threads::Threads)
 endif()
 
-if(WIN32)
-    find_library(CURSES_LIBRARIES pdcurses.lib)
-    target_link_libraries(termchess_server ws2_32)
-elseif(EMSCRIPTEN)
+if(EMSCRIPTEN)
     file(COPY ./img DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
     file(GLOB BOARDS ./*.board)
@@ -64,11 +61,6 @@ elseif(EMSCRIPTEN)
     set(CMAKE_VERBOSE_MAKEFILE 1)
 
     target_link_libraries(termchess corecommon)
-else()
-    set(CURSES_NEED_WIDE TRUE)
-    find_library(CURSES_LIBRARIES libncurses.a)
-    find_file(CURSES_INCLUDE_DIRS curses.h)
 endif()
 
-include_directories(${CURSES_INCLUDE_DIRS})
 target_link_libraries(termchess_server corecommon)
