@@ -1,15 +1,1 @@
-"twovone.board", "0 White\
-0 Black\
-2 Gray\
-\
-2R 2N 2B 2Q 2K 2Q 2K 2B 2N 2R\
-2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓\
-\
-\
-\
-\
-\
-\
-0P↑0P↑0P↑0P↑0P↑1P↑1P↑1P↑1P↑1P↑\
-0R 0N 0B 0Q 0K 1Q 1K 1B 1N 1R\
-"
+"twovone.board", "0 White\n0 Black\n2 Gray\n\n2R 2N 2B 2Q 2K 2Q 2K 2B 2N 2R\n2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓2P↓\n\n\n\n\n\n\n0P↑0P↑0P↑0P↑0P↑1P↑1P↑1P↑1P↑1P↑\n0R 0N 0B 0Q 0K 1Q 1K 1B 1N 1R\n"

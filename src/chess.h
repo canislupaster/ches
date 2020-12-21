@@ -1,19 +1,18 @@
 // Automatically generated header.
 
 #pragma once
-#include "threads.h"
 #include "vector.h"
 #include "hashtable.h"
 #include "cfg.h"
 typedef enum {
-	p_empty,
-	p_blocked,
 	p_king,
 	p_queen,
 	p_rook,
 	p_bishop,
 	p_knight,
-	p_pawn
+	p_pawn,
+	p_empty,
+	p_blocked
 } piece_ty;
 typedef enum {
 	pawn_x = 1,
@@ -54,16 +53,12 @@ typedef struct {
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
-void rot_pos(int rot, int pos[2], int pos_out[2]);
-char* piece_str(piece_t* p);
-int player_col(char p);
 enum {
 	move_invalid,
 	move_turn,
 	move_player,
 	move_success
 } make_move(game_t* g, move_t* m, int validate, char player);
-int clamp(int x, int min, int max);
 game_t parse_board(char* str);
 typedef enum {
 	mode_menu,
@@ -110,7 +105,7 @@ void game_free(game_t* g);
 typedef struct {
 	client_mode_t mode;
 
-	client_t net;
+	client_t* net;
 	union {
 		struct {
 			game_t g;
@@ -121,18 +116,13 @@ typedef struct {
 	};
 
 	int recv;
-	mtx_t lock;
-	thrd_t recv_thrd;
 
 	vector_t hints; //highlight pieces
 	move_t select;
-
-	void (*render)(void*);
-	void* arg;
 } chess_client_t;
 void refresh_hints(chess_client_t * client);
+mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur);
 void client_make_move(chess_client_t* client);
-void chess_client_startrecv(chess_client_t* client);
 void chess_client_gamelist(chess_client_t* client);
 void chess_client_makegame(chess_client_t* client, char* g_name);
 void chess_client_initgame(chess_client_t* client, char* name, client_mode_t mode);

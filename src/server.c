@@ -21,9 +21,7 @@ void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned n
 }
 
 void leave_game(chess_server_t* cserv, unsigned i) {
-	if (vector_search(&cserv->num_lobby, &i)) {
-		return;
-	}
+	if (vector_search_remove(&cserv->num_lobby, &i)) return;
 
 	mp_game_t** mg_ref = map_find(&cserv->num_joined, &i);
 	if (!mg_ref) return;
@@ -60,6 +58,9 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		drop(mg->name);
 		drop(mg);
 	} else {
+		player_t* p = vector_get(&mg->g.players, p_i);
+		p->joined=0;
+
 		vector_pushcpy(&data, &(char){(char)mp_game_left});
 		vector_pushcpy(&data, &(char){p_i});
 		broadcast(cserv, &mg->player_num, &data, 0);
@@ -108,7 +109,7 @@ int main(int argc, char** argv) {
 				read_board(&cur, &g);
 				g.moves = vector_new(sizeof(move_t));
 
-				if (cur.err) {
+				if (cur.err||joined<0) {
 					game_free(&g);
 					break;
 				}

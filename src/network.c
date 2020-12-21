@@ -12,6 +12,7 @@
 #ifndef __EMSCRIPTEN__
 #include <openssl/sha.h>
 #include <openssl/rand.h>
+#include "threads.h"
 #endif
 
 #ifdef __EMSCRIPTEN__
@@ -25,6 +26,7 @@
 #include <netdb.h>
 
 #include <emscripten.h>
+#include <emscripten/websocket.h>
 #elif defined(_WIN32)
 #include <winsock2.h>
 #include <windows.h>
@@ -76,7 +78,7 @@ int resolve(char* node, int proto, unsigned short port, struct sockaddr_storage*
 
 typedef struct {
 	vector_t frames;
-	unsigned len;
+	int fin;
 } server_msg_t;
 
 typedef struct {
@@ -103,64 +105,48 @@ char* WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 char* WS_RESP = "HTTP/1.1 101 Switching Protocols\r\n"
 								"Connection: Upgrade\r\n"
 								"Upgrade: websocket\r\n"
-								"Sec-WebSocket-Protocol: binary\r\n"
 								"Sec-WebSocket-Accept: %s\r\n"
 								"\r\n";
 
 #ifndef __EMSCRIPTEN__
-void write_frame(server_t* serv, int fd, ws_opcode op, vector_t* data) {
+void write_frame(int fd, ws_opcode op, vector_t* data) {
 	unsigned char hdr[2];
 
 	hdr[0] = op | (1<<7); //FIN - op
-	if (data==NULL) { //dataless control frame
-		hdr[1] = 1<<7;
-	} else if (data->length>125 && data->length<=UINT16_MAX) {
-		hdr[1] = 126 | (1<<7);
-		send(fd, hdr, 2, 0);
-		uint16_t l = htons((uint16_t)data->length);
-		send(fd, (char*)&l, 2, 0);
-	} else if (data->length>125) {
-		hdr[1] = 127 | (1<<7);
-		send(fd, hdr, 2, 0);
-		uint64_t l = htonll((uint64_t)data->length);
-		send(fd, (char*)&l, 8, 0);
-	} else {
-		hdr[1] = (unsigned char)data->length | (1<<7);
-		send(fd, hdr, 2, 0);
+	if (data) { //dataless control frame
+		if (data->length>125 && data->length<=UINT16_MAX) {
+			hdr[1] = 126;
+			send(fd, hdr, 2, 0);
+			uint16_t l = htons((uint16_t)data->length);
+			send(fd, (char*)&l, 2, 0);
+		} else if (data->length>125) {
+			hdr[1] = 127;
+			send(fd, hdr, 2, 0);
+			uint64_t l = htonll((uint64_t)data->length);
+			send(fd, (char*)&l, 8, 0);
+		} else {
+			hdr[1] = (unsigned char)data->length;
+			send(fd, hdr, 2, 0);
+		}
 	}
 
 	if (data) {
-		static int rand_init=0;
-		if (!rand_init) {
-			RAND_poll();
-			rand_init=1;
-		}
-
-		unsigned mask;
-		RAND_bytes((unsigned char*)&mask, 4);
-
-		send(fd, &mask, 4, 0);
-
-		unsigned i=0;
-		for (; i+4<=data->length; i+=4) *(unsigned*)(data->data+i) ^= mask;
-		for(; i<data->length; i++) data->data[i] ^= ((char*)&mask)[i%4];
-
-		send(fd, &data->data, data->length, 0);
+		send(fd, data->data, data->length, 0);
 	}
 }
 
-server_msg_t* read_frame(server_t* serv, int fd, unsigned idx, char* hup) {
+void read_frame(server_msg_t* msg, int fd, char* hup) {
 	unsigned char hdr[2];
-	if (recv(fd, hdr, 2, 0)==-1) return NULL;
+	if (recv(fd, hdr, 2, 0)==-1) return;
 
-	unsigned char fin = hdr[0]>>7;
-	ws_opcode op = hdr[0]&(CHAR_MAX>>4);
+	msg->fin = (int)(hdr[0]>>7);
+	ws_opcode op = hdr[0]&(UCHAR_MAX>>4);
 
 	if (hdr[1]>>7 != 1) { //no mask
-		*hup=1; return NULL;
+		*hup=1; return;
 	}
 
-	unsigned char lenb = hdr[1]&(CHAR_MAX>>1);
+	unsigned char lenb = hdr[1]&(UCHAR_MAX>>1);
 	unsigned len;
 	if (lenb<126) {
 		len = lenb;
@@ -174,20 +160,8 @@ server_msg_t* read_frame(server_t* serv, int fd, unsigned idx, char* hup) {
 		len = (unsigned)ntohll(x);
 	}
 
-	char exist=0;
-	server_msg_t* msg = vector_setget(&serv->msg, idx, &exist);
-	if (!exist) {
-		msg->frames = vector_new(1);
-		msg->len = 0;
-	}
-
-	if (msg->len>0 && msg->frames.length>=msg->len) {
-		vector_clear(&msg->frames);
-		msg->len=0;
-	}
-	
 	unsigned mask;
-	recv(fd, (unsigned char*)&mask, 4, 0);
+	recv(fd, &mask, 4, 0);
 
 	if (len) {
 		char* frame = vector_stock(&msg->frames, len);
@@ -200,19 +174,13 @@ server_msg_t* read_frame(server_t* serv, int fd, unsigned idx, char* hup) {
 
 	switch (op) {
 		case ws_close: {
-			*hup=1; return NULL;
+			*hup=1; return;
 		}
 		case ws_ping: {
-			write_frame(serv, fd, ws_pong, NULL);
-			return NULL;
+			write_frame(fd, ws_pong, NULL);
+			return;
 		}
-		default: {
-			if (fin) {
-				return msg;
-			} else {
-				return NULL;
-			}
-		}
+		default:;
 	}
 }
 
@@ -229,6 +197,7 @@ server_t start_server(int port, char upgrade) {
 		serv.conn_upgrade = vector_new(1);
 		serv.msg = vector_new(sizeof(server_msg_t));
 	}
+
 	serv.upgrade = upgrade;
 	serv.num = 0;
 
@@ -255,7 +224,6 @@ server_t start_server(int port, char upgrade) {
 	listen(sock, 10);
 	struct pollfd pfd = {.fd=sock, .events=POLLIN};
 	vector_pushcpy(&serv.conns, &pfd);
-	if (upgrade) vector_pushcpy(&serv.conn_upgrade, &(char){1});
 	vector_pushcpy(&serv.nums, &(unsigned){serv.num++});
 	return serv;
 }
@@ -287,7 +255,7 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 				hup=1;
 			} else if (pfd->revents & POLLIN) {
 				*i = *(unsigned*)vector_get(&serv->nums, poll_iter.i-1);
-				char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-1);
+				char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-2);
 
 				if (serv->upgrade && !*upgraded){
 					char linebuf[HTTP_LINE_BUF];
@@ -298,11 +266,12 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 
 					while (recv(pfd->fd, linebuf+lb_cur, 1, 0)!=-1) {
 						if (linebuf[lb_cur]=='\n') {
+							if (lb_cur==1) break;
+
 							lb_cur=0;
 							continue;
 						} else if (linebuf[lb_cur]=='\r') {
 							linebuf[lb_cur] = 0;
-							if (lb_cur==0) break;
 
 							char* lb_ptr = linebuf;
 							if (!parsed_req) {
@@ -313,11 +282,22 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 								}
 
 								parsed_req=1;
-							} else {
+							} else if (lb_cur>0) {
 								char* k = parse_name(&lb_ptr);
+								if (!k) {
+									hup=1; break;
+								} else if (strlen(k)==0) {
+									drop(k);
+									hup=1; break;
+								}
+
 								if (k[strlen(k)-1]==':') k[strlen(k)-1]=0;
 								skip_ws(&lb_ptr);
 								char* v = parse_name(&lb_ptr);
+								if (!v) {
+									drop(k);
+									hup=1; break;
+								}
 
 								if (streq(k, "Sec-WebSocket-Key")) {
 									ws_key=v;
@@ -349,28 +329,31 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 
 						if (send(pfd->fd, resp, strlen(resp), 0)==-1) hup=1;
 
-						drop(ws_key);
-						drop(ws_cat);
-						drop(b64_hash);
 						drop(resp);
+						drop(b64_hash);
+						drop(ws_cat);
+						drop(ws_key);
 					} else {
 						hup=1;
 					}
 				} else if (serv->upgrade) {
-					server_msg_t* msg = read_frame(serv, pfd->fd, poll_iter.i-1, &hup);
-					if (msg) {
-						if (msg->len==0 && msg->frames.length>=4) {
-							msg->len = ntohl(*(unsigned*)msg->frames.data);
-							vector_removemany(&msg->frames, 0, 4);
-						}
+					char exist=0;
+					server_msg_t* msg = vector_setget(&serv->msg, poll_iter.i-2, &exist);
+					if (!exist) {
+						msg->frames = vector_new(1);
+						msg->fin = 0;
+					}
 
-						if (msg->frames.length>=msg->len) { //pop a message
-							cur.left = msg->len;
-							cur.start = msg->frames.data;
-							cur.cur = msg->frames.data;
-							cur.err = 0;
-							return cur;
-						}
+					read_frame(msg, pfd->fd, &hup);
+					if (msg->fin && !hup) { //pop a message
+						cur.left = msg->frames.length;
+						cur.start = heapcpy(msg->frames.length, msg->frames.data);
+						cur.cur = cur.start;
+						cur.err = 0;
+
+						vector_clear(&msg->frames);
+
+						return cur;
 					}
 				} else {
 					if (recv(pfd->fd, (char*)&cur.left, sizeof(unsigned), 0)==-1) continue;
@@ -387,20 +370,25 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 			}
 
 			if (hup) {
+				if (serv->upgrade) {
+					char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-2);
+					if (*upgraded) {
+						write_frame(pfd->fd, ws_close, NULL);
+					}
+
+					vector_remove(&serv->conn_upgrade, poll_iter.i-2);
+
+					server_msg_t* msg = vector_get(&serv->msg, poll_iter.i-2);
+					if (msg) {
+						vector_free(&msg->frames);
+						vector_remove(&serv->msg, poll_iter.i-2);
+					}
+				}
+
 				map_remove(&serv->num_conns, i);
 
 				vector_remove(&serv->conns, poll_iter.i-1);
 				vector_remove(&serv->nums, poll_iter.i-1);
-
-				if (serv->upgrade) {
-					vector_remove(&serv->conn_upgrade, poll_iter.i-1);
-
-					server_msg_t* msg = vector_get(&serv->msg, poll_iter.i-1);
-					if (msg) {
-						vector_free(&msg->frames);
-						vector_remove(&serv->msg, poll_iter.i-1);
-					}
-				}
 
 				poll_iter.i--;
 
@@ -413,31 +401,138 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 
 void server_send(server_t* serv, unsigned i, vector_t* data) {
 	int fd = *(int*)map_find(&serv->num_conns, &i);
-	unsigned l = htonl(data->length);
-	send(fd, (char*)&l, sizeof(unsigned), 0);
-	send(fd, data->data, (int)data->length, 0);
+	if (serv->upgrade) {
+		write_frame(fd, ws_bin, data);
+	} else {
+		unsigned l = htonl(data->length);
+		send(fd, (char*)&l, sizeof(unsigned), 0);
+		send(fd, data->data, (int)data->length, 0);
+	}
 }
 #endif //EMSCRIPTEN
 
 typedef struct {
-	int err;
-
-	int fd;
 #ifdef __EMSCRIPTEN__
-	int cb_init;
-
-	mtx_t cnd_mtx;
-	cnd_t recv;
+	vector_t msg_buf;
+#else
+	thrd_t recv_thrd;
+	int fd;
+	int recv;
 #endif
+
+	void (*cb)(void*, cur_t cur);
+	void* arg;
+	int err;
 } client_t;
 
-client_t client_connect(char* serv, int port) {
+cur_t client_recv(client_t* client) {
+	cur_t cur = {0};
+#ifdef __EMSCRIPTEN__
+	if (client->msg_buf.length==0) {
+		cur.err=EAGAIN;
+		return cur;
+	}
+
+	vector_t* buf = vector_get(&client->msg_buf, 0);
+	cur.start=buf->data;
+	cur.cur=cur.start;
+	cur.left=buf->length;
+	cur.err=client->err;
+
+	vector_remove(&client->msg_buf, 0);
+#else
+	if (recv(client->fd, (char*)&cur.left, sizeof(unsigned), 0)==-1) cur.err=errno;
+	else cur.start = heap(cur.left);
+	if (recv(client->fd, cur.start, (int)cur.left, 0)==-1) cur.err=errno;
+	else cur.cur=cur.start;
+#endif
+
+	return cur;
+}
+
+//client callbacks
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+void client_recv_cb(char* data, unsigned len, void* udata) {
+	client_t* client = udata;
+	vector_t buf = vector_new(1);
+	vector_stockcpy(&buf, len, data);
+
+	vector_pushcpy(&client->msg_buf, &buf);
+
+	cur_t c = client_recv(client);
+	client->cb(client->arg, c);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void client_err_cb(void* udata) {
+	client_t* client = udata;
+	client->err = ECOMM;
+}
+#else
+#define NET_TIMEOUT 1000
+int client_recv_thrd(client_t* client) {
+	while (client->recv) {
+#ifdef _WIN32
+		struct pollfd pfds[2] = {{.fd=client->fd, .events=POLLIN}};
+		if (WSAPoll(pfds, 2, NET_TIMEOUT)==0) continue;
+#else
+		struct pollfd pfds[1] = {{.fd=client->fd, .events=POLLIN}};
+		if (poll(pfds, 1, NET_TIMEOUT)==0) continue;
+#endif
+
+		cur_t cur = client_recv(client);
+		client->cb(client->arg, cur);
+	}
+
+	return 1;
+}
+#endif
+
+client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* arg) {
+	client_t* client = heapcpy(sizeof(client_t), &(client_t){.err=0, .cb=cb, .arg=arg});
+
 #ifdef _WIN32
 	WSADATA data;
 	if (WSAStartup(MAKEWORD(2,2), &data)!=0)
-		return (client_t){.err=errno};
+		client->err=errno;
 
-#endif
+#elif defined(__EMSCRIPTEN__)
+
+	char* url = heapstr("ws://%s:%i", serv, port);
+
+	MAIN_THREAD_EM_ASM({
+		 sock = new WebSocket(UTF8ToString($0));
+		 sock.addEventListener("message", (ev) => {
+				ev.data.arrayBuffer().then((abuf) => {
+					let buf = _malloc(abuf.byteLength);
+					HEAP8.set(new Uint8Array(abuf), buf);
+					_client_recv_cb(buf, abuf.byteLength, $1);
+				});
+		 });
+
+		 sock.addEventListener("error", (ev) => {
+				 _client_err_cb($1);
+		 });
+	}, url, client);
+
+	drop(url);
+
+	client->msg_buf = vector_new(sizeof(vector_t));
+
+	int rdy;
+	do {
+		emscripten_sleep(100);
+		rdy = MAIN_THREAD_EM_ASM_INT(return sock.readyState;);
+
+		if (rdy==3) {
+			client->err=ECONNREFUSED;
+			break;
+		}
+	} while (rdy==0 && client->err==0);
+
+	return client;
+#else
 
 	struct sockaddr_storage addr;
 	socklen_t addrlen;
@@ -446,76 +541,48 @@ client_t client_connect(char* serv, int port) {
 		perrorx("could not resolve server");
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (connect(sock, (struct sockaddr*)&addr, addrlen)==-1 && errno!=EINPROGRESS)
-		return (client_t){.err=errno};
-
-#ifdef __EMSCRIPTEN__
-	return (client_t){.fd=sock, .cb_init=0, .err=0};
-#else
-	return (client_t){.fd=sock, .err=0};
+	if (connect(sock, (struct sockaddr*)&addr, addrlen)==-1 && errno!=EINPROGRESS) client->err=errno;
 #endif
+
+#ifndef __EMSCRIPTEN__
+	if (client->err) return client;
+
+	client->recv = 1;
+	thrd_create(&client->recv_thrd, (int(*)(void*))client_recv_thrd, client);
+#endif
+
+	return client;
 }
 
 void client_send(client_t* client, vector_t* d) {
-	int err=0;
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		sock.send(HEAP8.subarray($0, $0+$1));
+	}, d->data, d->length);
+#else
 	unsigned l = htonl(d->length);
 	if (send(client->fd, (char*)&l, sizeof(unsigned), 0)==-1
 			|| send(client->fd, d->data, (int)d->length, 0)==-1)
 		perrorx("couldnt send to server");
-}
-
-cur_t client_recv(client_t* client) {
-	cur_t cur = {0};
-	if (recv(client->fd, (char*)&cur.left, sizeof(unsigned), 0)==-1) cur.err=errno;
-	else cur.start = heap(cur.left);
-	if (recv(client->fd, cur.start, (int)cur.left, 0)==-1) cur.err=errno;
-	else cur.cur=cur.start;
-	return cur;
-}
-
-#ifdef _WIN32
-#define PIPE_BUF 4096 //arbitrary
 #endif
+}
 
+void client_free(client_t* client) {
 #ifdef __EMSCRIPTEN__
-void client_recv_cb(int fd, void* udata) {
-	client_t* client = udata;
-	cnd_broadcast(&client->recv);
-}
-
-void client_err_cb(int fd, int err, const char* msg, void* udata) {
-	client_t* client = udata;
-	cnd_broadcast(&client->recv);
-}
-#endif
-
-int client_recv_timeout(client_t* client, int ms) {
-#ifdef _WIN32
-	struct pollfd pfds[2] = {{.fd=client->fd, .events=POLLIN}};
-	if (WSAPoll(pfds, 2, ms)==0) return 0;
-#elif __EMSCRIPTEN__
-
-	if (!client->cb_init) {
-		mtx_init(&client->cnd_mtx, mtx_plain);
-		cnd_init(&client->recv);
-
-		mtx_lock(&client->cnd_mtx);
-
-		emscripten_set_socket_message_callback(client, client_recv_cb);
-		emscripten_set_socket_error_callback(client, client_err_cb);
-		client->cb_init=1;
+	EM_ASM(sock.close(););
+	vector_iterator msg_iter = vector_iterate(&client->msg_buf);
+	while (vector_next(&msg_iter)) {
+		vector_free(msg_iter.x);
 	}
 
-	printf("w8\n");
-	if (cnd_timedwait(&client->recv, &client->cnd_mtx, &(struct timespec){.tv_nsec=ms*(long)10e6})==thrd_timedout)
-		return 0;
+	vector_free(&client->msg_buf);
 
 #else
-	struct pollfd pfds[2] = {{.fd=client->fd, .events=POLLIN}};
-	if (poll(pfds, 2, ms)==0) return 0;
+	client->recv=0;
+	close(client->fd);
 #endif
 
-	return 1;
+	drop(client);
 }
 
 //htonl wrapper

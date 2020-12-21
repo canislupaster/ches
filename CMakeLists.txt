@@ -8,15 +8,16 @@ include_directories(corecommon/src)
 
 if (EMSCRIPTEN)
     add_executable(termchess src/chess.c src/network.c src/imwasm.c src/main_em.c)
+    add_dependencies(termchess genheader_termchess corecommon)
 else()
-    add_executable(termchess src/chess.c src/network.c src/main.c)
+    #termchess is gone lmao
+    #add_executable(termchess src/chess.c src/network.c src/main.c)
 endif()
 
 add_executable(termchess_server src/chess.c src/network.c src/server.c)
 
 add_custom_target(genheader_termchess WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMMAND headergen ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-add_dependencies(termchess genheader_termchess corecommon)
 add_dependencies(termchess_server genheader_termchess corecommon)
 
 # openssl
@@ -38,25 +39,31 @@ if(UNIX)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
     find_package(Threads REQUIRED)
 
-    target_link_libraries(termchess Threads::Threads)
     target_link_libraries(termchess_server Threads::Threads)
 endif()
 
 if(WIN32)
     find_library(CURSES_LIBRARIES pdcurses.lib)
     target_link_libraries(termchess_server ws2_32)
-    target_link_libraries(termchess ws2_32)
 elseif(EMSCRIPTEN)
+    file(COPY ./img DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
     file(GLOB BOARDS ./*.board)
     foreach(BOARD ${BOARDS})
         file(READ ${BOARD} content)
         get_filename_component(BOARD_NAME ${BOARD} NAME)
-        string(REPLACE "\n" "\\\n" content "${content}")
+        string(REPLACE "\n" "\\n" content "${content}")
         set(content "\"${BOARD_NAME}\", \"${content}\"")
         file(WRITE "./include/${BOARD_NAME}" "${content}")
     endforeach()
 
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
+    set(EMCC_OPTIONS "SHELL:-s ASYNCIFY")
+    target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
+    target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")
+    set(CMAKE_VERBOSE_MAKEFILE 1)
+
+    target_link_libraries(termchess corecommon)
 else()
     set(CURSES_NEED_WIDE TRUE)
     find_library(CURSES_LIBRARIES libncurses.a)
@@ -64,5 +71,4 @@ else()
 endif()
 
 include_directories(${CURSES_INCLUDE_DIRS})
-target_link_libraries(termchess ${CURSES_LIBRARIES} corecommon)
 target_link_libraries(termchess_server corecommon)

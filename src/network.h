@@ -16,6 +16,9 @@
 #ifndef __EMSCRIPTEN__
 #include <openssl/rand.h>
 #endif
+#ifndef __EMSCRIPTEN__
+#include "threads.h"
+#endif
 #ifdef __EMSCRIPTEN__
 #include <unistd.h>
 #endif
@@ -36,6 +39,9 @@
 #endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#endif
+#ifdef __EMSCRIPTEN__
+#include <emscripten/websocket.h>
 #endif
 #if (defined(_WIN32)) && !defined(__EMSCRIPTEN__)
 #include <winsock2.h>
@@ -97,20 +103,20 @@ cur_t server_recv(server_t* serv, unsigned* i);
 void server_send(server_t* serv, unsigned i, vector_t* data);
 #endif
 typedef struct {
-	int err;
-
-	int fd;
 #ifdef __EMSCRIPTEN__
-	int cb_init;
-
-	mtx_t cnd_mtx;
-	cnd_t recv;
+	vector_t msg_buf;
+#else
+	thrd_t recv_thrd;
+	int fd;
+	int recv;
 #endif
+
+	void (*cb)(void*, cur_t cur);
+	void* arg;
+	int err;
 } client_t;
-client_t client_connect(char* serv, int port);
+client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* arg);
 void client_send(client_t* client, vector_t* d);
-cur_t client_recv(client_t* client);
-int client_recv_timeout(client_t* client, int ms);
 void write_int(vector_t* bytes, int x);
 void write_uint(vector_t* bytes, unsigned x);
 void write_str(vector_t* bytes, char* str);
