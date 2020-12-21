@@ -22,7 +22,8 @@ typedef enum {
 	pawn_y = 4,
 	pawn_ny = 8,
 	pawn_firstmv = 16,
-	pawn_firstmv_swp = 32
+	pawn_firstmv_swp = 32,
+	pawn_promoted = 64
 } piece_flags_t;
 typedef struct {
 	piece_ty ty;
@@ -43,7 +44,12 @@ typedef struct {
 
 	vector_t allies;
 } player_t;
+typedef enum {
+	game_pawn_promotion=1
+} game_flags_t;
 typedef struct {
+	game_flags_t flags;
+
 	int board_w, board_h;
 	vector_t init_board;
 	vector_t board;
@@ -97,17 +103,9 @@ typedef enum {
 	mp_move_made, //packed move_t
 	mp_game_left //unsigned player
 } mp_serv_t;
-void write_players(vector_t* data, game_t* g);
-#include "network.h"
-void read_players(cur_t* cur, game_t* g, char* joined);
-void write_boardvec(vector_t* data, vector_t* board);
-void write_board(vector_t* data, game_t* g);
-void read_board(cur_t* cur, game_t* g);
-void read_initboard(cur_t* cur, game_t* g);
 void write_move(vector_t* data, move_t* m);
+#include "network.h"
 move_t read_move(cur_t* cur);
-void write_moves(vector_t* data, game_t* g);
-void read_moves(cur_t* cur, game_t* g);
 void game_free(game_t* g);
 typedef struct {
 	client_mode_t mode;
@@ -128,6 +126,8 @@ typedef struct {
 	vector_t hints; //highlight pieces
 	move_t select;
 } chess_client_t;
+void write_game(vector_t* data, game_t* g);
+void read_game(cur_t* cur, game_t* g, char* joined);
 void refresh_hints(chess_client_t* client);
 void set_move_cursor(chess_client_t* client, unsigned i);
 void chess_client_initgame(chess_client_t* client, client_mode_t mode);

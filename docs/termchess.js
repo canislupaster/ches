@@ -1631,14 +1631,16 @@ var ASM_CONSTS = {
  2124: function($0) {($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)},  
  2209: function() {elem.innerText = "";},  
  2232: function($0) {elem.innerText = UTF8ToString($0);},  
- 2343: function() {let v = elem.value; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
- 2462: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
- 2639: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
- 2706: function($0) {elem.classList.remove(UTF8ToString($0))},  
- 2748: function($0) {elem.removeAttribute(UTF8ToString($0))},  
- 2789: function($0) {elem.classList.add(UTF8ToString($0))},  
- 2828: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1))},  
- 2884: function() {Module.noExitRuntime = true;}
+ 2371: function() {let v = elem.value; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
+ 2490: function() {return elem.checked;},  
+ 2513: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
+ 2690: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
+ 2757: function($0) {elem.classList.remove(UTF8ToString($0))},  
+ 2799: function($0) {elem.removeAttribute(UTF8ToString($0))},  
+ 2840: function($0) {elem.classList.add(UTF8ToString($0))},  
+ 2877: function($0) {elem.setAttribute(UTF8ToString($0), "")},  
+ 2917: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1));},  
+ 2972: function() {Module.noExitRuntime = true;}
 };
 
 

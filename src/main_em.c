@@ -144,6 +144,9 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 
 			drop(b_i);
 
+			if (html_checked("pawnpromotion"))
+				web->client.g.flags |= game_pawn_promotion;
+
 			chess_client_initgame(&web->client, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer);
 			if (web->menustate==menu_makegame) chess_client_makegame(&web->client, gname, web->mp_name);
 			setup_game(web);
@@ -197,8 +200,8 @@ void render(html_ui_t* ui, chess_web_t* web) {
 	switch (web->client.mode) {
 		case mode_menu: switch (web->menustate) {
 			case menu_main: {
-				html_p(ui, "p1", "welcome to chess. images by wikimedians Cburnett and spinningspark");
-				html_p(ui, "p2", "now consider the following modes:");
+				html_p(ui, "p1", "welcome to chess. images by wikimedians Cburnett and spinningspark.");
+				html_p(ui, "p2", " also epilepsy warning, some sequences may flash; now consider the following modes:");
 
 				html_start_div(ui, "b", 0);
 
@@ -255,6 +258,11 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				}
 
 				drop(b_i);
+
+				html_start_div(ui, "opts", 0);
+				html_label(ui, "pawnpromo-label", "pawn promotion permitted?");
+				html_checkbox(ui, "pawnpromotion", 1);
+				html_end(ui);
 
 				html_elem_t* e = html_button(ui, "make", "make game");
 				html_event(ui, e, html_click, a_makegame);
@@ -378,6 +386,13 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			html_end(ui); //tr
 			html_end(ui); //table
 			html_end(ui); //wrapper
+
+			if (t->check) {
+				html_start_div(ui, "flash", 0);
+				html_p(ui, "flashtxt", t->mate ? "CHECKMATE!" : "CHECK!");
+				html_end(ui);
+			}
+
 			break;
 		}
 	}

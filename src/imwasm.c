@@ -350,7 +350,7 @@ void html_end(html_ui_t* ui) {
 
 char* HTML_ATTR_CLASS = "class"; //is it idiomatic if it makes my code look better act faster and be nicer
 void html_set_attr(html_elem_t* elem, char* name, char* val) {
-	vector_pushcpy(&elem->new_attribs, &(char*[2]) {name==HTML_ATTR_CLASS ? HTML_ATTR_CLASS : heapcpystr(name), heapcpystr(val)});
+	vector_pushcpy(&elem->new_attribs, &(char*[2]) {name==HTML_ATTR_CLASS ? HTML_ATTR_CLASS : heapcpystr(name), val ? heapcpystr(val) : NULL});
 }
 
 html_elem_t* html_start_div(html_ui_t* ui, char* id, int list) {
@@ -393,6 +393,10 @@ html_elem_t* html_p(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "p", id, text);
 }
 
+html_elem_t* html_label(html_ui_t* ui, char* id, char* text) {
+	return html_elem_new(ui, "label", id, text);
+}
+
 html_elem_t* html_button(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "button", id, text);
 }
@@ -404,6 +408,13 @@ html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
 html_elem_t* html_input(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
 	if (val) html_set_attr(e, "value", val);
+	return e;
+}
+
+html_elem_t* html_checkbox(html_ui_t* ui, char* id, int checked) {
+	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
+	html_set_attr(e, "type", "checkbox");
+	if (checked) html_set_attr(e, "checked", NULL);
 	return e;
 }
 
@@ -422,6 +433,11 @@ char* html_input_value(char* id) {
 		stringToUTF8(v, buf, len);
 		return buf;
 	});
+}
+
+int html_checked(char* id) {
+	html_select_id(id);
+	return MAIN_THREAD_EM_ASM_INT({return elem.checked;});
 }
 
 char* html_local_get(char* name) {
@@ -471,7 +487,9 @@ void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 		new_attrib_iter = vector_iterate(&elem->new_attribs);
 		while (vector_next(&new_attrib_iter)) {
 			char** new_attr = new_attrib_iter.x;
-			if ((new_attr[0]==attr[0] || streq(new_attr[0], attr[0])) && streq(new_attr[1], attr[1])) {
+			//...
+			if ((new_attr[0]==attr[0] || streq(new_attr[0], attr[0]))
+					&& (new_attr[1] == attr[1] || (new_attr[1] && attr[1] && streq(new_attr[1], attr[1])))) {
 				old[new_attrib_iter.i - 1] = 1;
 				del = 0;
 			}
@@ -494,9 +512,11 @@ void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 		char** new_attr = new_attrib_iter.x;
 		if (!old[new_attrib_iter.i - 1]) {
 			if (new_attr[0]==HTML_ATTR_CLASS) {
-				MAIN_THREAD_EM_ASM((elem.classList.add(UTF8ToString($0))), new_attr[1]);
+				MAIN_THREAD_EM_ASM(elem.classList.add(UTF8ToString($0)), new_attr[1]);
+			} else if (new_attr[1]==NULL) {
+				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), ""), new_attr[0]);
 			} else {
-				MAIN_THREAD_EM_ASM((elem.setAttribute(UTF8ToString($0), UTF8ToString($1))), new_attr[0], new_attr[1]);
+				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), UTF8ToString($1));, new_attr[0], new_attr[1]);
 			}
 		}
 	}

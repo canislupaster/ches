@@ -101,14 +101,11 @@ int main(int argc, char** argv) {
 			case mp_make_game: {
 				leave_game(&cserv, i);
 
-				game_t g = {0};
+				game_t g;
 				char* g_name = read_str(&cur);
 
 				char joined;
-				read_players(&cur, &g, &joined);
-				read_board(&cur, &g);
-				read_initboard(&cur, &g);
-				read_moves(&cur, &g);
+				read_game(&cur, &g, &joined);
 
 				if (cur.err||joined<0) {
 					game_free(&g);
@@ -173,10 +170,7 @@ int main(int argc, char** argv) {
 				vector_clear(&resp);
 				vector_pushcpy(&resp, &(char){(char)mp_game});
 
-				write_players(&resp, &mg->g);
-				write_board(&resp, &mg->g);
-				write_boardvec(&resp, &mg->g.init_board);
-				write_moves(&resp, &mg->g);
+				write_game(&resp, &mg->g);
 				vector_pushcpy(&resp, &(char){(char)(p_iter.i-1)});
 
 				break;
