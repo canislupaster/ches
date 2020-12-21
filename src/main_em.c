@@ -6,13 +6,15 @@
 
 #include "imwasm.h"
 
-#define NUM_BOARDS 3
+#define NUM_BOARDS 4
 char* boards[NUM_BOARDS*2] = {
 #include "../include/default.board"
 		,
 #include "../include/fourplayer.board"
 		,
 #include "../include/twovone.board"
+		,
+#include "../include/capablanca.board"
 };
 
 #define DEFAULT_SERVADDR "167.172.222.101"
@@ -44,6 +46,7 @@ typedef enum {
 	a_makegame_menu,
 	a_makegame,
 	a_boardchange,
+	a_setmovecursor,
 	a_joingame,
 	a_select
 } action_t;
@@ -141,8 +144,8 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 
 			drop(b_i);
 
-			chess_client_initgame(&web->client, web->mp_name, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer);
-			if (web->menustate==menu_makegame) chess_client_makegame(&web->client, gname);
+			chess_client_initgame(&web->client, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer);
+			if (web->menustate==menu_makegame) chess_client_makegame(&web->client, gname, web->mp_name);
 			setup_game(web);
 			break;
 		}
@@ -173,6 +176,10 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			}
 
 			web->which=!web->which;
+			break;
+		}
+		case a_setmovecursor: {
+			set_move_cursor(&web->client, ev->elem->i);
 			break;
 		}
 	}
@@ -304,6 +311,17 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_set_attr(d, HTML_ATTR_CLASS, rotclass);
 			}
 
+			html_start_div(ui, "moves", 1);
+			vector_iterator move_iter = vector_iterate(&web->client.g.moves);
+			while (vector_next(&move_iter)) {
+				char* pgn = move_pgn(&web->client.g, move_iter.x);
+				html_event(ui, html_p(ui, NULL, pgn), html_click, a_setmovecursor);
+				drop(pgn);
+			}
+
+			html_event(ui, html_p(ui, NULL, "now"), html_click, a_setmovecursor);
+			html_end(ui);
+
 			html_start_table(ui, "board");
 			int pos[2];
 			for (pos[1]=0; pos[1]<web->client.g.board_h; pos[1]++) {
@@ -318,10 +336,10 @@ void render(html_ui_t* ui, chess_web_t* web) {
 					html_elem_t* td = html_start_td(ui);
 
 					int col = p->player%4;
-					static char* wpieces[] = {"img/wking.svg","img/wqueen.svg","img/wrook.svg","img/wbishop.svg","img/wknight.svg","img/wpawn.svg"};
-					static char* bpieces[] = {"img/king.svg","img/queen.svg","img/rook.svg","img/bishop.svg","img/knight.svg","img/pawn.svg"};
-					static char* rpieces[] = {"img/rking.svg","img/rqueen.svg","img/rrook.svg","img/rbishop.svg","img/rknight.svg","img/rpawn.svg"};
-					static char* gpieces[] = {"img/gking.svg","img/gqueen.svg","img/grook.svg","img/gbishop.svg","img/gknight.svg","img/gpawn.svg"};
+					static char* bpieces[] = {"img/king.svg","img/queen.svg","img/rook.svg","img/bishop.svg","img/knight.svg","img/pawn.svg", "img/archibishop.svg", "img/chancellor.svg"};
+					static char* wpieces[] = {"img/wking.svg","img/wqueen.svg","img/wrook.svg","img/wbishop.svg","img/wknight.svg","img/wpawn.svg", "img/warchibishop.svg", "img/wchancellor.svg"};
+					static char* rpieces[] = {"img/rking.svg","img/rqueen.svg","img/rrook.svg","img/rbishop.svg","img/rknight.svg","img/rpawn.svg", "img/rarchibishop.svg", "img/rchancellor.svg"};
+					static char* gpieces[] = {"img/gking.svg","img/gqueen.svg","img/grook.svg","img/gbishop.svg","img/gknight.svg","img/gpawn.svg", "img/garchibishop.svg", "img/gchancellor.svg"};
 
 					switch (p->ty) {
 						case p_empty:break;

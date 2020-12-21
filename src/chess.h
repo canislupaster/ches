@@ -11,6 +11,8 @@ typedef enum {
 	p_bishop,
 	p_knight,
 	p_pawn,
+	p_archibishop,
+	p_chancellor,
 	p_empty,
 	p_blocked
 } piece_ty;
@@ -43,6 +45,7 @@ typedef struct {
 } player_t;
 typedef struct {
 	int board_w, board_h;
+	vector_t init_board;
 	vector_t board;
 	vector_t moves;
 	char player; //of current move
@@ -58,8 +61,9 @@ enum {
 	move_turn,
 	move_player,
 	move_success
-} make_move(game_t* g, move_t* m, int validate, char player);
+} make_move(game_t* g, move_t* m, int validate, int make, char player);
 game_t parse_board(char* str);
+char* move_pgn(game_t* g, move_t* m);
 typedef enum {
 	mode_menu,
 	mode_gamelist,
@@ -96,11 +100,14 @@ typedef enum {
 void write_players(vector_t* data, game_t* g);
 #include "network.h"
 void read_players(cur_t* cur, game_t* g, char* joined);
+void write_boardvec(vector_t* data, vector_t* board);
 void write_board(vector_t* data, game_t* g);
 void read_board(cur_t* cur, game_t* g);
+void read_initboard(cur_t* cur, game_t* g);
 void write_move(vector_t* data, move_t* m);
 move_t read_move(cur_t* cur);
 void write_moves(vector_t* data, game_t* g);
+void read_moves(cur_t* cur, game_t* g);
 void game_free(game_t* g);
 typedef struct {
 	client_mode_t mode;
@@ -110,6 +117,7 @@ typedef struct {
 		struct {
 			game_t g;
 			char player;
+			unsigned move_cursor;
 		};
 
 		vector_t game_list;
@@ -120,10 +128,11 @@ typedef struct {
 	vector_t hints; //highlight pieces
 	move_t select;
 } chess_client_t;
-void refresh_hints(chess_client_t * client);
+void refresh_hints(chess_client_t* client);
+void set_move_cursor(chess_client_t* client, unsigned i);
+void chess_client_initgame(chess_client_t* client, client_mode_t mode);
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur);
 void client_make_move(chess_client_t* client);
 void chess_client_gamelist(chess_client_t* client);
-void chess_client_makegame(chess_client_t* client, char* g_name);
-void chess_client_initgame(chess_client_t* client, char* name, client_mode_t mode);
+void chess_client_makegame(chess_client_t* client, char* g_name, char* name);
 int chess_client_joingame(chess_client_t* client, unsigned i, char* name);

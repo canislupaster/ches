@@ -107,7 +107,8 @@ int main(int argc, char** argv) {
 				char joined;
 				read_players(&cur, &g, &joined);
 				read_board(&cur, &g);
-				g.moves = vector_new(sizeof(move_t));
+				read_initboard(&cur, &g);
+				read_moves(&cur, &g);
 
 				if (cur.err||joined<0) {
 					game_free(&g);
@@ -174,6 +175,7 @@ int main(int argc, char** argv) {
 
 				write_players(&resp, &mg->g);
 				write_board(&resp, &mg->g);
+				write_boardvec(&resp, &mg->g.init_board);
 				write_moves(&resp, &mg->g);
 				vector_pushcpy(&resp, &(char){(char)(p_iter.i-1)});
 
@@ -187,7 +189,7 @@ int main(int argc, char** argv) {
 				mp_game_t* mg = *mg_ref;
 				unsigned player = vector_search(&mg->player_num, &i)-1;
 
-				if (make_move(&mg->g, &m, 1, (char)player) != move_success) break;
+				if (make_move(&mg->g, &m, 1, 1, (char)player) != move_success) break;
 
 				vector_pushcpy(&resp, &(char){(char)mp_move_made});
 				write_move(&resp, &m);

@@ -1,1 +1,1 @@
-"default.board", "0 White\n2 Black\n\n1R 1N 1B 1Q 1K 1B 1N 1R\n1P↓1P↓1P↓1P↓1P↓1P↓1P↓1P↓\n\n\n\n\n0P↑0P↑0P↑0P↑0P↑0P↑0P↑0P↑\n0R 0N 0B 0Q 0K 0B 0N 0R\n"
+"default.board", "0 White\n2 Black\n\n1R 1N 1B 1Q 1K 1B 1N 1R\n1Pv1Pv1Pv1Pv1Pv1Pv1Pv1Pv\n\n\n\n\n0P^0P^0P^0P^0P^0P^0P^0P^\n0R 0N 0B 0Q 0K 0B 0N 0R\n"

@@ -1615,30 +1615,30 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  1168: function($0, $1) {sock = new WebSocket(UTF8ToString($0)); sock.addEventListener("message", (ev) => { ev.data.arrayBuffer().then((abuf) => { let buf = _malloc(abuf.byteLength); HEAP8.set(new Uint8Array(abuf), buf); _client_recv_cb(buf, abuf.byteLength, $1); }); }); sock.addEventListener("error", (ev) => { _client_err_cb($1); });},  
- 1484: function() {return sock.readyState;},  
- 1508: function($0, $1) {sock.send(HEAP8.subarray($0, $0+$1));},  
- 1550: function() {list_elem=[];},  
- 1564: function($0) {elem = document.getElementById(UTF8ToString($0)); if (elem==null) { console.log(UTF8ToString($0)); }},  
- 1669: function($0) {elem = list_elem[$0];},  
- 1717: function($0) {elem.removeEventListener(UTF8ToString($0), null);},  
- 1771: function($0, $1) {elem.addEventListener(UTF8ToString($0), (ev) => { if (_html_cb($1)==1) ev.preventDefault(); });},  
- 1871: function() {elem.remove()},  
- 1885: function() {elem=document.body;},  
- 1905: function($0, $1) {list_elem[$1] = elem.appendChild(document.createElement(UTF8ToString($0)));},  
- 1985: function($0, $1) {elem.appendChild(document.createElement(UTF8ToString($0))).id = UTF8ToString($1);},  
- 2071: function($0) {list_elem[$0]=elem;},  
- 2091: function($0) {($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)},  
- 2176: function() {elem.innerText = "";},  
- 2199: function($0) {elem.innerText = UTF8ToString($0);},  
- 2310: function() {let v = elem.value; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
- 2429: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
- 2606: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
- 2673: function($0) {elem.classList.remove(UTF8ToString($0))},  
- 2715: function($0) {elem.removeAttribute(UTF8ToString($0))},  
- 2756: function($0) {elem.classList.add(UTF8ToString($0))},  
- 2795: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1))},  
- 2851: function() {Module.noExitRuntime = true;}
+  1201: function($0, $1) {sock = new WebSocket(UTF8ToString($0)); sock.addEventListener("message", (ev) => { ev.data.arrayBuffer().then((abuf) => { let buf = _malloc(abuf.byteLength); HEAP8.set(new Uint8Array(abuf), buf); _client_recv_cb(buf, abuf.byteLength, $1); }); }); sock.addEventListener("error", (ev) => { _client_err_cb($1); });},  
+ 1517: function() {return sock.readyState;},  
+ 1541: function($0, $1) {sock.send(HEAP8.subarray($0, $0+$1));},  
+ 1583: function() {list_elem=[];},  
+ 1597: function($0) {elem = document.getElementById(UTF8ToString($0)); if (elem==null) { console.log(UTF8ToString($0)); }},  
+ 1702: function($0) {elem = list_elem[$0];},  
+ 1750: function($0) {elem.removeEventListener(UTF8ToString($0), null);},  
+ 1804: function($0, $1) {elem.addEventListener(UTF8ToString($0), (ev) => { if (_html_cb($1)==1) ev.preventDefault(); });},  
+ 1904: function() {elem.remove()},  
+ 1918: function() {elem=document.body;},  
+ 1938: function($0, $1) {list_elem[$1] = elem.appendChild(document.createElement(UTF8ToString($0)));},  
+ 2018: function($0, $1) {elem.appendChild(document.createElement(UTF8ToString($0))).id = UTF8ToString($1);},  
+ 2104: function($0) {list_elem[$0]=elem;},  
+ 2124: function($0) {($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)},  
+ 2209: function() {elem.innerText = "";},  
+ 2232: function($0) {elem.innerText = UTF8ToString($0);},  
+ 2343: function() {let v = elem.value; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
+ 2462: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
+ 2639: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
+ 2706: function($0) {elem.classList.remove(UTF8ToString($0))},  
+ 2748: function($0) {elem.removeAttribute(UTF8ToString($0))},  
+ 2789: function($0) {elem.classList.add(UTF8ToString($0))},  
+ 2828: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1))},  
+ 2884: function() {Module.noExitRuntime = true;}
 };
 
 
@@ -2529,6 +2529,12 @@ var ASM_CONSTS = {
       });
     }
 
+  function _exit(status) {
+      // void _exit(int status);
+      // http://pubs.opengroup.org/onlinepubs/000095399/functions/exit.html
+      exit(status);
+    }
+
   var SYSCALLS={mappings:{},buffers:[null,[],[]],printChar:function(stream, curr) {
         var buffer = SYSCALLS.buffers[stream];
         assert(buffer);
@@ -2850,6 +2856,7 @@ var asmLibraryArg = {
   "emscripten_memcpy_big": _emscripten_memcpy_big,
   "emscripten_resize_heap": _emscripten_resize_heap,
   "emscripten_sleep": _emscripten_sleep,
+  "exit": _exit,
   "fd_close": _fd_close,
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,

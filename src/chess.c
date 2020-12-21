@@ -10,6 +10,8 @@ typedef enum {
 	p_bishop,
 	p_knight,
 	p_pawn,
+	p_archibishop,
+	p_chancellor,
 	p_empty,
 	p_blocked
 } piece_ty;
@@ -47,6 +49,7 @@ typedef struct {
 
 typedef struct {
 	int board_w, board_h;
+	vector_t init_board;
 	vector_t board;
 	vector_t moves;
 	char player; //of current move
@@ -156,10 +159,20 @@ int valid_move(game_t* g, move_t* m) {
 			if (off[0]!=0 && off[1]!=0) return 0;
 			break;
 		}
+		case p_chancellor:
+		case p_archibishop:
 		case p_knight: {
-			if ((abs(off[1])!=2||abs(off[0])!=1)&&(abs(off[1])!=1||abs(off[0])!=2))
-				return 0;
+			if ((abs(off[1])!=2||abs(off[0])!=1)&&(abs(off[1])!=1||abs(off[0])!=2)) {
+				if ((p->ty==p_chancellor && (off[0]==0 || off[1]==0)) || (p->ty==p_archibishop && h && v)) {
+					collision=1;
+					break;
+				} else {
+					return 0;
+				}
+			}
+
 			collision = 0;
+
 			break;
 		}
 		case p_queen: {
@@ -227,8 +240,10 @@ void move_swap(game_t* g, piece_t* from, piece_t* to) {
 	if (to->ty==p_king) {
 		((player_t*)vector_get(&g->players, to->player))->king = piece_i(g, to);
 	} else if (to->ty == p_pawn) {
-		to->flags &= ~pawn_firstmv;
-		to->flags |= pawn_firstmv_swp;
+		if (to->flags & pawn_firstmv) {
+			to->flags ^= pawn_firstmv;
+			to->flags |= pawn_firstmv_swp;
+		}
 	}
 }
 
@@ -236,7 +251,7 @@ void unmove_swap(game_t* g, piece_t* from, piece_t* to) {
 	if (to->ty==p_king) {
 		((player_t*)vector_get(&g->players, to->player))->king = piece_i(g, from);
 	} else if (to->ty == p_pawn && to->flags & pawn_firstmv_swp) {
-		to->flags &= ~pawn_firstmv_swp;
+		to->flags ^= pawn_firstmv_swp;
 		to->flags |= pawn_firstmv;
 	}
 
@@ -245,13 +260,8 @@ void unmove_swap(game_t* g, piece_t* from, piece_t* to) {
 }
 
 //this is worse
-void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
-	player_t* t = vector_get(&g->players, p->player);
-
-	int pos[2];
-	board_pos(g,pos,p);
-
-	switch (p->ty) {
+void piece_moves_rec(game_t* g, player_t* t, int pos[2], piece_ty override, piece_t* p, vector_t* moves) {
+	switch (override) {
 		case p_blocked:
 		case p_empty: return;
 		case p_bishop:
@@ -259,7 +269,7 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 		case p_queen: {
 			for (int sx=-1; sx<=1; sx++) {
 				for (int sy=-1; sy<=1; sy++) {
-					if ((p->ty==p_bishop && (sy==0 || sx==0)) || (p->ty==p_rook && (sy!=0 && sx!=0))) continue;
+					if ((override==p_bishop && (sy==0 || sx==0)) || (override==p_rook && (sy!=0 && sx!=0))) continue;
 
 					int to[2] = {pos[0]+sx, pos[1]+sy};
 					piece_t* pt;
@@ -321,6 +331,16 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 
 			break;
 		}
+		case p_archibishop: {
+			piece_moves_rec(g, t, pos, p_bishop, p, moves);
+			piece_moves_rec(g, t, pos, p_knight, p, moves);
+			break;
+		}
+		case p_chancellor: {
+			piece_moves_rec(g, t, pos, p_rook, p, moves);
+			piece_moves_rec(g, t, pos, p_knight, p, moves);
+			break;
+		}
 	}
 
 	vector_iterator mv_iter = vector_iterate(moves);
@@ -341,6 +361,15 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 			mv_iter.i--;
 		}
 	}
+}
+
+void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
+	player_t* t = vector_get(&g->players, p->player);
+
+	int pos[2];
+	board_pos(g,pos,p);
+
+	piece_moves_rec(g, t, pos, p->ty, p, moves);
 }
 
 int check_mate(game_t* g, char player) {
@@ -366,7 +395,7 @@ enum {
 	move_turn,
 	move_player,
 	move_success
-} make_move(game_t* g, move_t* m, int validate, char player) {
+} make_move(game_t* g, move_t* m, int validate, int make, char player) {
 	piece_t* from = board_get(g, m->from);
 	player_t* t = vector_get(&g->players, player);
 
@@ -385,11 +414,17 @@ enum {
 		if (!valid_move(g, m)) return move_invalid;
 	}
 
-	move_swap(g, from, to);
+	if (make || validate) {
+		move_swap(g, from, to);
+	}
 
 	if (validate && endangered(g, vector_get(&g->board, t->king))) {
 		unmove_swap(g, from, to);
 		return move_invalid;
+	}
+
+	if (!make && validate) {
+		unmove_swap(g, from, to);
 	}
 
 	//update checks & mates
@@ -405,15 +440,16 @@ enum {
 	player_t* t_next;
 
 	do {
-		g->player++;
-		g->player = (char)(g->player % g->players.length);
+		g->player = (char)((g->player+1) % g->players.length);
 		t_next = vector_get(&g->players, g->player);
+
+		if (g->player == player) {
+			g->won=1;
+			break;
+		}
 	} while (t_next->mate);
 
-	if (g->player == player) {
-		g->won=1;
-		return move_success;
-	}
+	vector_pushcpy(&g->moves, m);
 
 	return move_success;
 }
@@ -498,7 +534,7 @@ game_t parse_board(char* str) {
 			while (*str==' ') str++;
 		}
 
-		if (skip_char(&str, 'A')) {
+		if (skip_char(&str, 'O')) {
 			p->ty = p_blocked;
 			p->player=0;
 			continue;
@@ -512,10 +548,10 @@ game_t parse_board(char* str) {
 			case 'P': {
 				str++;
 				p->ty = p_pawn;
-				if (skip_name(&str, "←")) p->flags=pawn_x|pawn_nx;
-				else if (skip_name(&str, "↑")) p->flags=pawn_y|pawn_ny;
-				else if (skip_name(&str, "→")) p->flags=pawn_x;
-				else if (skip_name(&str, "↓")) p->flags=pawn_y;
+				if (skip_name(&str, "<")) p->flags=pawn_x|pawn_nx;
+				else if (skip_name(&str, "^")) p->flags=pawn_y|pawn_ny;
+				else if (skip_name(&str, ">")) p->flags=pawn_x;
+				else if (skip_name(&str, "v")) p->flags=pawn_y;
 				else if (skip_name(&str, "↖")) p->flags=pawn_y|pawn_ny|pawn_x|pawn_nx;
 				else if (skip_name(&str, "↗")) p->flags=pawn_y|pawn_ny|pawn_x;
 				else if (skip_name(&str, "↙")) p->flags=pawn_y|pawn_x|pawn_nx;
@@ -536,11 +572,15 @@ game_t parse_board(char* str) {
 			case 'B': p->ty=p_bishop; break;
 			case 'N': p->ty=p_knight; break;
 			case 'R': p->ty=p_rook; break;
+			case 'A': p->ty=p_archibishop; break;
+			case 'C': p->ty=p_chancellor; break;
+			default: perrorx("unknown piece type"); break;
 		}
 
 		str++;
 	}
 
+	vector_cpy(&g.board, &g.init_board);
 	g.moves = vector_new(sizeof(move_t));
 	g.player = 0;
 	g.won=0;
@@ -553,6 +593,15 @@ game_t parse_board(char* str) {
 	}
 
 	return g;
+}
+
+char* move_pgn(game_t* g, move_t* m) {
+	static char alphabet[] = "abcdefghijklmnopqrstuvwxyz";
+	if (m->from[0]<sizeof(alphabet) && m->to[0]<sizeof(alphabet)) {
+		return heapstr("%c%i %c%i", alphabet[m->from[0]], g->board_h-m->from[1], alphabet[m->to[0]], g->board_h-m->to[1]);
+	} else { //are they trying to play shogi?
+		return heapstr("%i-%i %i-%i", m->from[0], g->board_h-m->from[1], m->to[0], g->board_h-m->to[1]);
+	}
 }
 
 typedef enum {
@@ -639,10 +688,8 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 	}
 }
 
-void write_board(vector_t* data, game_t* g) {
-	write_int(data, g->board_w);
-	write_int(data, g->board_h);
-	vector_iterator b_iter = vector_iterate(&g->board);
+void write_boardvec(vector_t* data, vector_t* board) {
+	vector_iterator b_iter = vector_iterate(board);
 	while (vector_next(&b_iter)) {
 		piece_t* p = b_iter.x;
 		//in future htons might be required
@@ -650,6 +697,12 @@ void write_board(vector_t* data, game_t* g) {
 		write_uchr(data, (unsigned char)p->flags);
 		vector_pushcpy(data, &p->player);
 	}
+}
+
+void write_board(vector_t* data, game_t* g) {
+	write_int(data, g->board_w);
+	write_int(data, g->board_h);
+	write_boardvec(data, &g->board);
 }
 
 void read_board(cur_t* cur, game_t* g) {
@@ -666,6 +719,16 @@ void read_board(cur_t* cur, game_t* g) {
 		if (p->ty == p_king) {
 			((player_t*)vector_get(&g->players, p->player))->king = piece_i(g, p);
 		}
+	}
+}
+
+void read_initboard(cur_t* cur, game_t* g) {
+	g->init_board = vector_new(sizeof(piece_t));
+	for (int i=0; i<g->board_w*g->board_h; i++) {
+		piece_t* p = vector_push(&g->init_board);
+		p->ty = (piece_ty)read_uchr(cur);
+		p->flags = (piece_flags_t)read_uchr(cur);
+		p->player = read_chr(cur);
 	}
 }
 
@@ -713,6 +776,7 @@ typedef struct {
 		struct {
 			game_t g;
 			char player;
+			unsigned move_cursor;
 		};
 
 		vector_t game_list;
@@ -728,18 +792,40 @@ void read_game(cur_t* cur, chess_client_t* client) {
 	client->g = (game_t){0};
 	read_players(cur, &client->g, NULL);
 	read_board(cur, &client->g);
+	read_initboard(cur, &client->g);
 	read_moves(cur, &client->g);
 	client->player = read_chr(cur);
 }
 
 //run whenever select changes or game update
-void refresh_hints(chess_client_t * client) {
+void refresh_hints(chess_client_t* client) {
 	piece_t* p = board_get(&client->g, client->select.from);
 	vector_clear(&client->hints);
 	if (!p) return;
 	if (p->player==client->player) {
 		piece_moves(&client->g, p, &client->hints);
 	}
+}
+
+void set_move_cursor(chess_client_t* client, unsigned i) {
+	if (i<client->move_cursor) {
+		client->move_cursor=0;
+		vector_free(&client->g.board);
+		vector_cpy(&client->g.init_board, &client->g.board);
+	}
+
+	for (;client->move_cursor<i;client->move_cursor++) {
+		move_t* m = vector_get(&client->g.moves, client->move_cursor);
+		move_swap(&client->g, board_get(&client->g, m->from), board_get(&client->g, m->to));
+	}
+}
+
+void chess_client_initgame(chess_client_t* client, client_mode_t mode) {
+	client->mode = mode;
+	if (mode==mode_singleplayer) client->player = 0;
+
+	client->move_cursor = 0;
+	client->hints = vector_new(sizeof(piece_t*));
 }
 
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
@@ -749,8 +835,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 		case mp_game: {
 			read_game(&cur, client);
 			if (client->mode != mode_multiplayer) {
-				client->hints = vector_new(sizeof(piece_t*));
-				client->mode = mode_multiplayer;
+				chess_client_initgame(client, mode_multiplayer);
 			}
 
 			break;
@@ -789,7 +874,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 		}
 		case mp_move_made: {
 			move_t m = read_move(&cur);
-			make_move(&client->g, &m, 0, client->g.player);
+			make_move(&client->g, &m, 0, client->move_cursor==client->g.moves.length, client->g.player);
 
 			refresh_hints(client);
 			break;
@@ -803,11 +888,12 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 }
 
 void client_make_move(chess_client_t* client) {
-	if (client->player != client->g.player) return;
+	if (client->player != client->g.player || client->move_cursor!=client->g.moves.length) return;
 
 	piece_t* p = board_get(&client->g, client->select.to);
 	if (vector_search(&client->hints, &p)!=0) {
-		make_move(&client->g, &client->select, 0, client->player);
+		make_move(&client->g, &client->select, 0, 1, client->player);
+		client->move_cursor++;
 
 		//switch player or send move
 		if (client->mode==mode_singleplayer) {
@@ -827,7 +913,12 @@ void chess_client_gamelist(chess_client_t* client) {
 	client_send(client->net, &(vector_t){.data=(char[]){(char)mp_list_game}, .length=1});
 }
 
-void chess_client_makegame(chess_client_t* client, char* g_name) {
+void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
+	client->player = 0;
+	player_t* t = vector_get(&client->g.players, client->player);
+	t->joined = 1;
+	if (name) t->name = name;
+
 	vector_t data = vector_new(1);
 	
 	vector_pushcpy(&data, &(char){(char)mp_make_game});
@@ -835,23 +926,12 @@ void chess_client_makegame(chess_client_t* client, char* g_name) {
 	write_str(&data, g_name);
 	write_players(&data, &client->g);
 	write_board(&data, &client->g);
+	write_boardvec(&data, &client->g.init_board);
+	write_moves(&data, &client->g);
 
 	client_send(client->net, &data);
 
 	vector_free(&data);
-}
-
-void chess_client_initgame(chess_client_t* client, char* name, client_mode_t mode) {
-	client->player = 0;
-	player_t* t = vector_get(&client->g.players, client->player);
-	if (mode==mode_multiplayer) t->joined = 1;
-	if (name) t->name = name;
-	board_pos_i(&client->g, client->select.from, t->king);
-
-	client->select.to[0] = -1;
-	client->hints = vector_new(sizeof(piece_t*));
-
-	client->mode = mode;
 }
 
 int chess_client_joingame(chess_client_t* client, unsigned i, char* name) {

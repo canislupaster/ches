@@ -43,7 +43,7 @@ if(UNIX)
 endif()
 
 if(EMSCRIPTEN)
-    file(COPY ./img DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    file(COPY ./img DESTINATION ${CMAKE_SOURCE_DIR}/docs/)
 
     file(GLOB BOARDS ./*.board)
     foreach(BOARD ${BOARDS})
@@ -54,11 +54,12 @@ if(EMSCRIPTEN)
         file(WRITE "./include/${BOARD_NAME}" "${content}")
     endforeach()
 
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/index.html ${CMAKE_SOURCE_DIR}/docs/index.html COPYONLY)
     set(EMCC_OPTIONS "SHELL:-s ASYNCIFY")
     target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
     target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")
-    set(CMAKE_VERBOSE_MAKEFILE 1)
+
+    add_custom_command(TARGET termchess POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/termchess.wasm ${CMAKE_CURRENT_BINARY_DIR}/termchess.js ${CMAKE_SOURCE_DIR}/docs/)
 
     target_link_libraries(termchess corecommon)
 endif()

@@ -53,9 +53,9 @@
         }
 
         #board td {
-            width: 4em;
-            height: 4em;
-            padding: 0;
+            cursor: pointer;
+            width: 3em;
+            height: 3em;
         }
 
         td img {
@@ -122,6 +122,19 @@
             margin: 0;
             padding: 10px;
         }
+
+        #moves {
+            grid-column: 4;
+            grid-row: 1/5;
+            margin: 0 0 0 1em;
+            overflow-y: auto;
+            height: 80vh;
+        }
+
+        #moves p {
+            cursor: pointer;
+        }
+
     </style>
 </head>
 <body>
