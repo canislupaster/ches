@@ -438,6 +438,36 @@ int check_mate(game_t* g, char player) {
 	return 1;
 }
 
+//update checks & mates, then find another player or set won if next is set
+void next_player(game_t* g, int next) {
+	char player = g->player;
+
+	vector_iterator t_iter = vector_iterate(&g->players);
+	while (vector_next(&t_iter)) {
+		player_t* t2 = t_iter.x;
+		if (endangered(g, vector_get(&g->board, t2->king))) {
+			t2->check=1;
+			t2->mate = check_mate(g, (char)(t_iter.i-1));
+		} else {
+			t2->check=0;
+		}
+	}
+
+	if (next) {
+		player_t* t_next;
+
+		do {
+			g->player = (char)((g->player+1) % g->players.length);
+			t_next = vector_get(&g->players, g->player);
+
+			if (g->player == player) {
+				g->won=1;
+				break;
+			}
+		} while (t_next->mate);
+	}
+}
+
 enum {
 	move_invalid,
 	move_turn,
@@ -475,30 +505,7 @@ enum {
 		unmove_swap(g, from, to);
 	}
 
-	//update checks & mates
-	vector_iterator t_iter = vector_iterate(&g->players);
-	while (vector_next(&t_iter)) {
-		player_t* t2 = t_iter.x;
-		if (endangered(g, vector_get(&g->board, t2->king))) {
-			t2->check=1;
-			t2->mate = check_mate(g, (char)(t_iter.i-1));
-		} else {
-			t2->check=0;
-		}
-	}
-
-	player_t* t_next;
-
-	do {
-		g->player = (char)((g->player+1) % g->players.length);
-		t_next = vector_get(&g->players, g->player);
-
-		if (g->player == player) {
-			g->won=1;
-			break;
-		}
-	} while (t_next->mate);
-
+	next_player(g, 1);
 	vector_pushcpy(&g->moves, m);
 
 	return move_success;
@@ -992,9 +999,9 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 	return msg;
 }
 
-void client_make_move(chess_client_t* client) {
+int client_make_move(chess_client_t* client) {
 	if (client->spectating || client->player != client->g.player
-			|| client->move_cursor!=client->g.moves.length) return;
+			|| client->move_cursor!=client->g.moves.length) return 0;
 
 	piece_t* p = board_get(&client->g, client->select.to);
 	if (vector_search(&client->hints, &p)!=0) {
@@ -1012,6 +1019,10 @@ void client_make_move(chess_client_t* client) {
 			client_send(client->net, &data);
 			vector_free(&data);
 		}
+
+		return 1;
+	} else {
+		return 0;
 	}
 }
 

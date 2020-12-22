@@ -394,6 +394,9 @@
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/corecommon/src/vector.h">
 			<Option target="corecommon"/>
 		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/ai.c">
+			<Option target="termchess"/>
+		</Unit>
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/chess.c">
 			<Option target="termchess_server"/>
 			<Option target="termchess"/>

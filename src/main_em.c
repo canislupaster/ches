@@ -34,6 +34,10 @@ typedef struct {
 
 	int menu_customboard;
 	int which;
+
+	//apparently we need two booleans to determine whether the player has been checkmated and when to disable it
+	int mate_change;
+	int check_displayed;
 } chess_web_t;
 
 chess_web_t g_web;
@@ -49,6 +53,7 @@ typedef enum {
 	a_setmovecursor,
 	a_joingame,
 	a_select,
+	a_checkdisplayed,
 	a_back
 } action_t;
 
@@ -63,6 +68,21 @@ void handler(void* arg, cur_t cur) {
 void setup_game(chess_web_t* web) {
 	web->which = 0;
 	web->client.select.from[0] = -1;
+	web->check_displayed = 0;
+}
+
+void update_dispcheck(html_ui_t* ui, chess_web_t* web) {
+	player_t* t = vector_get(&web->client.g.players, web->client.player);
+	if (!t->mate) {
+		web->mate_change=1;
+		web->check_displayed=0;
+	} else if (web->mate_change) {
+		web->mate_change=0;
+		web->check_displayed=0;
+	}
+
+	if (t->check && !web->check_displayed)
+		html_settimeout(ui, 1000, a_checkdisplayed, NULL);
 }
 
 void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
@@ -71,11 +91,13 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 	switch (ev->action) {
 		case a_netmsg: {
 			mp_serv_t msg = *(mp_serv_t*)&ev->custom_data;
+			printf("%i\n", msg);
 			switch (msg) {
 				case mp_game_full: {
 					web->err = "that game is full, take another gamble";
 					break;
 				}
+				case mp_move_made: update_dispcheck(ui, web); break;
 				default:;
 			}
 
@@ -208,7 +230,10 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			board_rot_pos(&web->client.g, t->board_rot, select, web->which==0?web->client.select.from:web->client.select.to);
 
 			if (web->which==1) {
-				client_make_move(&web->client);
+				if (client_make_move(&web->client) && web->client.mode==mode_singleplayer) {
+					update_dispcheck(ui, web);
+				}
+
 				web->client.select.from[0] = -1;
 				vector_clear(&web->client.hints);
 			} else {
@@ -216,6 +241,10 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			}
 
 			web->which=!web->which;
+			break;
+		}
+		case a_checkdisplayed: {
+			web->check_displayed=1;
 			break;
 		}
 		case a_setmovecursor: {
@@ -355,7 +384,6 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_end(ui);
 			}
 
-
 			html_start_div(ui, "wrapper", 1);
 			vector_iterator t_iter = vector_iterate(&web->client.g.players);
 			while (vector_next(&t_iter)) {
@@ -459,7 +487,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			html_end(ui); //table
 			html_end(ui); //wrapper
 
-			if (t->check) {
+			if (!web->check_displayed && t->check) {
 				html_start_div(ui, "flash", 0);
 				html_p(ui, "flashtxt", t->mate ? "CHECKMATE!" : "CHECK!");
 				html_end(ui);

@@ -7,7 +7,7 @@ add_subdirectory(corecommon)
 include_directories(corecommon/src)
 
 if (EMSCRIPTEN)
-    add_executable(termchess src/chess.c src/network.c src/imwasm.c src/main_em.c)
+    add_executable(termchess src/chess.c src/network.c src/ai.c src/imwasm.c src/main_em.c)
     add_dependencies(termchess genheader_termchess corecommon)
 else()
     #termchess is gone lmao

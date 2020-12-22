@@ -17,16 +17,17 @@ typedef enum {
 	html_click,
 	html_keypress,
 	html_onchange,
+	html_timeout,
 	html_custom
 } html_event_ty;
 
 typedef struct {
 	html_event_ty ty;
-	struct html_elem* elem;
+	struct html_ui* ui;
 	unsigned action;
 
 	union {
-		struct html_ui* ui;
+		struct html_elem* elem;
 		void* custom_data;
 	};
 } html_event_t;
@@ -109,11 +110,9 @@ void html_select(html_elem_t* elem) {
 
 void html_render(html_ui_t* ui);
 
-int html_send(html_ui_t* ui, unsigned action, void* data) {
-	ui->update(ui, &(html_event_t){.ty=html_custom, .elem=NULL, .action=action, .custom_data=data}, ui->arg);
+void html_send(html_ui_t* ui, unsigned action, void* data) {
+	ui->update(ui, &(html_event_t){.ty=html_custom, .ui=ui, .action=action, .custom_data=data}, ui->arg);
 	html_render(ui);
-
-	return EM_FALSE;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -121,7 +120,19 @@ int html_cb(html_event_t* ev) {
 	ev->ui->update(ev->ui, ev, ev->ui->arg);
 	html_render(ev->ui);
 
+	if (ev->ty==html_timeout) drop(ev);
+
 	return EM_FALSE;
+}
+
+void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data) {
+	html_event_t* ev = heapcpy(sizeof(html_event_t), &(html_event_t){.ty=html_timeout, .action=action, .ui=ui, .custom_data=data});
+
+	MAIN_THREAD_EM_ASM({
+		window.setTimeout(()=>{
+			_html_cb($0);
+		}, $1);
+	}, ev, ms);
 }
 
 void html_register_ev(html_elem_t* elem, html_event_t* ev, int rem) {
@@ -348,9 +359,23 @@ void html_end(html_ui_t* ui) {
 	ui->cur[ui->cur_i == 0 ? ui->cur_i : ui->cur_i--] = NULL;
 }
 
-char* HTML_ATTR_CLASS = "class"; //is it idiomatic if it makes my code look better act faster and be nicer
+//is it idiomatic if it makes my code look better act faster and be nicer
+//if needed can add more to reduce allocations
+char* HTML_ATTR_CLASS = "class";
+char* HTML_ATTR_VALUE = "value";
+
+int HTML_ATTR_CONSTS=2;
+char* HTML_ATTR_CONST[2] = {"class", "value"};
+
 void html_set_attr(html_elem_t* elem, char* name, char* val) {
-	vector_pushcpy(&elem->new_attribs, &(char*[2]) {name==HTML_ATTR_CLASS ? HTML_ATTR_CLASS : heapcpystr(name), val ? heapcpystr(val) : NULL});
+	for (int i=0; i<HTML_ATTR_CONSTS; i++) {
+		if (HTML_ATTR_CONST[i]==name) {
+			vector_pushcpy(&elem->new_attribs, &(char*[2]){name, val ? heapcpystr(val) : NULL});
+			return;
+		}
+	}
+
+	vector_pushcpy(&elem->new_attribs, &(char*[2]){heapcpystr(name), val ? heapcpystr(val) : NULL});
 }
 
 html_elem_t* html_start_div(html_ui_t* ui, char* id, int list) {
@@ -411,7 +436,7 @@ html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
 
 html_elem_t* html_input(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
-	if (val) html_set_attr(e, "value", val);
+	if (val) html_set_attr(e, HTML_ATTR_VALUE, val);
 	return e;
 }
 
@@ -424,7 +449,7 @@ html_elem_t* html_checkbox(html_ui_t* ui, char* id, int checked) {
 
 html_elem_t* html_textarea(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "textarea", id, NULL);
-	if (val) html_set_attr(e, "value", val);
+	if (val) html_set_attr(e, HTML_ATTR_VALUE, val);
 	return e;
 }
 
@@ -502,6 +527,8 @@ void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 		if (del) {
 			if (attr[0] == HTML_ATTR_CLASS) {
 				MAIN_THREAD_EM_ASM((elem.classList.remove(UTF8ToString($0))), attr[1]);
+			} else if (attr[0] == HTML_ATTR_VALUE) {
+				MAIN_THREAD_EM_ASM((elem.value="";));
 			} else {
 				MAIN_THREAD_EM_ASM((elem.removeAttribute(UTF8ToString($0))), attr[0]);
 			}
@@ -517,6 +544,8 @@ void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 		if (!old[new_attrib_iter.i - 1]) {
 			if (new_attr[0]==HTML_ATTR_CLASS) {
 				MAIN_THREAD_EM_ASM(elem.classList.add(UTF8ToString($0)), new_attr[1]);
+			} else if (new_attr[0]==HTML_ATTR_VALUE) {
+				MAIN_THREAD_EM_ASM(elem.value = UTF8ToString($0);, new_attr[1]);
 			} else if (new_attr[1]==NULL) {
 				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), ""), new_attr[0]);
 			} else {

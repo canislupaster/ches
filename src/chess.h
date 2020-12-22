@@ -63,7 +63,12 @@ typedef struct {
 	piece_t piece_swap; //emulating moves is needed when evaluating possible moves or creating a game tree, maybe later augment into a stack
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
+void board_pos(game_t* g, int pos[2], piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
+void move_swap(game_t* g, move_t* m);
+void unmove_swap(game_t* g, piece_t* from, piece_t* to);
+void piece_moves(game_t* g, piece_t* p, vector_t* moves);
+void next_player(game_t* g, int next);
 enum {
 	move_invalid,
 	move_turn,
@@ -130,7 +135,7 @@ void set_move_cursor(chess_client_t* client, unsigned i);
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make);
 void pnum_leave(game_t* g, unsigned pnum);
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur);
-void client_make_move(chess_client_t* client);
+int client_make_move(chess_client_t* client);
 void chess_client_gamelist(chess_client_t* client);
 void chess_client_makegame(chess_client_t* client, char* g_name, char* name);
 int chess_client_joingame(chess_client_t* client, unsigned i, char* name);

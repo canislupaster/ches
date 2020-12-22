@@ -12,15 +12,16 @@ typedef enum {
 	html_click,
 	html_keypress,
 	html_onchange,
+	html_timeout,
 	html_custom
 } html_event_ty;
 typedef struct {
 	html_event_ty ty;
-	struct html_elem* elem;
+	struct html_ui* ui;
 	unsigned action;
 
 	union {
-		struct html_ui* ui;
+		struct html_elem* elem;
 		void* custom_data;
 	};
 } html_event_t;
@@ -67,7 +68,8 @@ typedef struct html_ui {
 	cycling_index_t cin;
 } html_ui_t;
 html_ui_t html_ui_new();
-int html_send(html_ui_t* ui, unsigned action, void* data);
+void html_send(html_ui_t* ui, unsigned action, void* data);
+void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data);
 void html_event(html_ui_t* ui, html_elem_t* elem, html_event_ty ty, unsigned action);
 void html_end(html_ui_t* ui);
 extern char* HTML_ATTR_CLASS;

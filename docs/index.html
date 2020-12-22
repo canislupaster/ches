@@ -134,6 +134,7 @@
         #moves p {
             cursor: pointer;
         }
+
         @keyframes flash {
             50% {
                 opacity: 1;
@@ -162,11 +163,6 @@
             0%, 100% {
                 background: transparent;
             }
-
-            from, to {
-                width: 100%;
-                height: 100%;
-            }
         }
 
         #flash p {
@@ -184,14 +180,14 @@
             position: absolute;
             animation: 0.2s linear 0.1s flashbg;
             text-align: center;
-            width: 0;
             vertical-align: middle;
-            height: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             animation-iteration-count: 5;
             overflow: hidden;
+            width: 100%;
+            height: 100%;
         }
 
         #back {
