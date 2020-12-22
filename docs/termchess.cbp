@@ -405,6 +405,14 @@
 			<Option target="termchess_server"/>
 			<Option target="termchess"/>
 		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/chessfrontend.c">
+			<Option target="termchess_server"/>
+			<Option target="termchess"/>
+		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/chessfrontend.h">
+			<Option target="termchess_server"/>
+			<Option target="termchess"/>
+		</Unit>
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/imwasm.c">
 			<Option target="termchess"/>
 		</Unit>

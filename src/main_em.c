@@ -3,6 +3,7 @@
 
 #include "network.h"
 #include "chess.h"
+#include "chessfrontend.h"
 
 #include "imwasm.h"
 
@@ -61,7 +62,7 @@ void handler(void* arg, cur_t cur) {
 	chess_web_t* web = arg;
 
 	mp_serv_t msg = chess_client_recvmsg(&web->client, cur);
-	printf("recv, %u", web->client.game_list.length);
+	printf("recv %u\n", msg);
 	html_send(&web->ui, a_netmsg, (void*)msg);
 }
 
@@ -69,6 +70,7 @@ void setup_game(chess_web_t* web) {
 	web->which = 0;
 	web->client.select.from[0] = -1;
 	web->check_displayed = 0;
+	web->mate_change=1;
 }
 
 void update_dispcheck(html_ui_t* ui, chess_web_t* web) {
@@ -91,7 +93,6 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 	switch (ev->action) {
 		case a_netmsg: {
 			mp_serv_t msg = *(mp_serv_t*)&ev->custom_data;
-			printf("%i\n", msg);
 			switch (msg) {
 				case mp_game_full: {
 					web->err = "that game is full, take another gamble";
@@ -367,17 +368,19 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				}
 
 				html_start_div(ui, "spectators", 1);
-				vector_iterator spec_iter = vector_iterate(&web->client.g.spectators);
+				vector_iterator spec_iter = vector_iterate(&web->client.g.m.spectators);
 				while (vector_next(&spec_iter)) {
-					html_span(ui, NULL, *(char**)spec_iter.x);
-					if (spec_iter.i!=web->client.g.spectators.length) {
+					char* name = *(char**)spec_iter.x;
+					if (*name==0) html_span(ui, NULL, "anon");
+					else html_span(ui, NULL, name);
+					if (spec_iter.i!=web->client.g.m.spectators.length) {
 						html_span(ui, NULL, ", ");
 					}
 				}
 
-				if (web->client.g.spectators.length==1) {
+				if (web->client.g.m.spectators.length==1) {
 					html_span(ui, NULL, " is spectating");
-				} else if (web->client.g.spectators.length>1) {
+				} else if (web->client.g.m.spectators.length>1) {
 					html_span(ui, NULL, " are spectating");
 				}
 

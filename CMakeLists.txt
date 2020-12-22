@@ -7,14 +7,14 @@ add_subdirectory(corecommon)
 include_directories(corecommon/src)
 
 if (EMSCRIPTEN)
-    add_executable(termchess src/chess.c src/network.c src/ai.c src/imwasm.c src/main_em.c)
+    add_executable(termchess src/chess.c src/network.c src/ai.c src/chessfrontend.c src/imwasm.c src/main_em.c)
     add_dependencies(termchess genheader_termchess corecommon)
 else()
     #termchess is gone lmao
     #add_executable(termchess src/chess.c src/network.c src/main.c)
 endif()
 
-add_executable(termchess_server src/chess.c src/network.c src/server.c)
+add_executable(termchess_server src/chess.c src/chessfrontend.c src/network.c src/server.c)
 
 add_custom_target(genheader_termchess WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMMAND headergen ${CMAKE_CURRENT_SOURCE_DIR}/src)
 

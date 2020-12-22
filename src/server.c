@@ -1,4 +1,5 @@
 #include "chess.h"
+#include "chessfrontend.h"
 #include "network.h"
 
 typedef struct {
@@ -60,6 +61,8 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		vector_remove(&cserv->games, g_i);
 
 		game_free(&mg->g);
+		mp_extra_free(&mg->g.m);
+
 		vector_free(&mg->player_num);
 		drop(mg->name);
 		drop(mg);
@@ -118,9 +121,11 @@ int main(int argc, char** argv) {
 				}
 
 				mp_game_t* mg = heapcpy(sizeof(mp_game_t), &(mp_game_t){.g=g, .name=g_name, .player_num=vector_new(sizeof(unsigned))});
+				mg->g.m.spectators = vector_new(sizeof(char*));
+				mg->g.m.takeback = 0;
+
 				map_insertcpy(&cserv.num_joined, &i, &mg);
 
-				vector_populate(&mg->player_num, g.players.length, &(unsigned){0});
 				vector_setcpy(&mg->player_num, (unsigned)joined, &i);
 
 				vector_pushcpy(&cserv.games, &mg);
@@ -157,7 +162,7 @@ int main(int argc, char** argv) {
 
 				int spectate = p_iter.i-1==mg->g.players.length;
 				if (spectate) {
-					vector_pushcpy(&mg->g.spectators, &name);
+					vector_pushcpy(&mg->g.m.spectators, &name);
 				} else {
 					p->joined = 1;
 					if (strlen(name)>0) {
@@ -168,7 +173,7 @@ int main(int argc, char** argv) {
 					}
 				}
 
-				unsigned pnum = spectate ? p_iter.i-1 + mg->g.spectators.length-1 : p_iter.i-1;
+				unsigned pnum = spectate ? p_iter.i-1 + mg->g.m.spectators.length-1 : p_iter.i-1;
 
 				vector_pushcpy(&resp, &(char){(char)mp_game_joined});
 				write_uint(&resp, pnum);
@@ -183,7 +188,7 @@ int main(int argc, char** argv) {
 				vector_pushcpy(&resp, &(char){(char)mp_game});
 
 				write_game(&resp, &mg->g);
-				write_spectators(&resp, &mg->g);
+				write_spectators(&resp, &mg->g.m);
 
 				write_uint(&resp, pnum);
 

@@ -207,6 +207,9 @@ void html_elem_remove_down(html_ui_t* ui, html_elem_t* elem) {
 	vector_iterator child_iter = vector_iterate(&elem->children);
 	while (vector_next(&child_iter)) {
 		html_elem_t* child = *(html_elem_t**) child_iter.x;
+		//html_select(child);
+		//EM_ASM(console.log(elem););
+		//printf("remove child\n");
 		html_elem_remove_down(ui, child);
 	}
 
@@ -485,22 +488,30 @@ void html_local_set(char* name, char* val) {
 	MAIN_THREAD_EM_ASM((window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));), name, val);
 }
 
-void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
+int html_elem_update(html_ui_t* ui, html_elem_t* elem) {
+	//html_select(elem);
+	//EM_ASM(console.log(elem););
+
 	if (~elem->flags & html_used) {
+		//printf("removing\n");
 		html_elem_remove(ui, elem);
-		return;
+		//printf("removed\n");
+		return 1;
 	}
 
 	elem->flags ^= html_used;
 
 	if (elem->flags & html_list) {
+		//printf("updating children\n");
 		vector_iterator child_iter = vector_iterate(&elem->children);
 		while (vector_next(&child_iter)) {
 			html_elem_t* e = *(html_elem_t**)child_iter.x;
-			if (e->flags&html_list_child) html_elem_update(ui, e);
+			if (e->flags&html_list_child)
+				if (html_elem_update(ui, e)) child_iter.i--;
 		}
 
 		elem->flags ^= html_list;
+		//printf("updated children\n");
 	}
 
 	html_select(elem);
@@ -559,6 +570,8 @@ void html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 	elem->attribs = elem->new_attribs;
 	elem->new_attribs = attribs;
 	vector_clear(&elem->new_attribs);
+
+	return 0;
 }
 
 void html_render(html_ui_t* ui) {
