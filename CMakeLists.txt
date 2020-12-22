@@ -14,7 +14,7 @@ else()
     #add_executable(termchess src/chess.c src/network.c src/main.c)
 endif()
 
-add_executable(termchess_server src/chess.c src/chessfrontend.c src/network.c src/server.c)
+add_executable(termchess_server src/ai.c src/chess.c src/chessfrontend.c src/network.c src/server.c)
 
 add_custom_target(genheader_termchess WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMMAND headergen ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
