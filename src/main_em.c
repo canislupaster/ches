@@ -476,7 +476,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 
 					if (bpos[0] == web->client.select.from[0] && bpos[1] == web->client.select.from[1]) {
 						html_set_attr(td, HTML_ATTR_CLASS, "selected");
-					} else if (vector_search(&web->client.hints, &p)!=0) {
+					} else if (vector_search(&web->client.hints, bpos)!=0) {
 						html_set_attr(td, HTML_ATTR_CLASS, "hint");
 					}
 

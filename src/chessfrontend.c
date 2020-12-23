@@ -104,7 +104,7 @@ void write_boardvec(vector_t* data, vector_t* board) {
 		piece_t* p = b_iter.x;
 		//in future htons might be required
 		write_uchr(data, (unsigned char)p->ty);
-		write_uchr(data, (unsigned char)p->flags);
+		write_uint(data, (unsigned)p->flags);
 		vector_pushcpy(data, &p->player);
 	}
 }
@@ -123,7 +123,7 @@ void read_board(cur_t* cur, game_t* g) {
 	for (int i=0; i<g->board_w*g->board_h; i++) {
 		piece_t* p = vector_push(&g->board);
 		p->ty = (piece_ty)read_uchr(cur);
-		p->flags = (piece_flags_t)read_uchr(cur);
+		p->flags = (piece_flags_t)read_uint(cur);
 		p->player = read_chr(cur);
 
 		if (p->ty == p_king) {
@@ -137,7 +137,7 @@ void read_initboard(cur_t* cur, game_t* g) {
 	for (int i=0; i<g->board_w*g->board_h; i++) {
 		piece_t* p = vector_push(&g->init_board);
 		p->ty = (piece_ty)read_uchr(cur);
-		p->flags = (piece_flags_t)read_uchr(cur);
+		p->flags = (piece_flags_t)read_uint(cur);
 		p->player = read_chr(cur);
 	}
 }
@@ -255,7 +255,7 @@ void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make
 	}
 
 	client->move_cursor = client->g.moves.length;
-	client->hints = vector_new(sizeof(piece_t*));
+	client->hints = vector_new(sizeof(int[2]));
 }
 
 void pnum_leave(game_t* g, unsigned pnum) {
@@ -352,17 +352,18 @@ int client_make_move(chess_client_t* client) {
 	if (client->spectating || client->player != client->g.player
 			|| client->move_cursor!=client->g.moves.length) return 0;
 
-	piece_t* p = board_get(&client->g, client->select.to);
-	if (vector_search(&client->hints, &p)!=0) {
+	if (vector_search(&client->hints, client->select.to)!=0) {
 		make_move(&client->g, &client->select, 0, 1, client->player);
 		client->move_cursor++;
 
 		//switch player or send move
 		if (client->mode==mode_singleplayer) {
-			while (client->g.player!=client->player) {
+			while (client->g.player!=client->player && !client->g.won) {
 				ai_make_move(&client->g);
 				client->move_cursor++;
 			}
+
+			refresh_hints(client);
 		} else if (client->mode==mode_multiplayer) {
 			vector_t data = vector_new(1);
 			vector_pushcpy(&data, &(char){(char)mp_make_move});

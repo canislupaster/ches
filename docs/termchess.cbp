@@ -395,6 +395,11 @@
 			<Option target="corecommon"/>
 		</Unit>
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/ai.c">
+			<Option target="termchess_server"/>
+			<Option target="termchess"/>
+		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/ai.h">
+			<Option target="termchess_server"/>
 			<Option target="termchess"/>
 		</Unit>
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/chess.c">

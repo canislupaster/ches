@@ -23,7 +23,7 @@ typedef enum {
 	pawn_ny = 8,
 	pawn_firstmv = 16,
 	pawn_firstmv_swp = 32,
-	pawn_promoted = 64
+	pawn_promoted = 64,
 } piece_flags_t;
 typedef struct {
 	piece_ty ty;
@@ -68,13 +68,15 @@ typedef struct {
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
 int piece_i(game_t* g, piece_t* ptr);
-void board_pos(game_t* g, int pos[2], piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 int piece_owned(piece_t* p, char player);
+int board_pos_next(game_t* g, int* x);
+int player_check(game_t* g, char p_i, player_t* player);
+void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
+void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
 void move_swap(game_t* g, move_t* m);
-void unmove_swap(game_t* g, piece_t* from, piece_t* to);
 void piece_moves(game_t* g, piece_t* p, vector_t* moves);
-void next_player(game_t* g, int next);
+void next_player(game_t* g);
 enum {
 	move_invalid,
 	move_turn,
