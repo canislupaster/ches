@@ -52,9 +52,11 @@ typedef enum {
 	a_makegame,
 	a_boardchange,
 	a_setmovecursor,
+	a_setmovecursor_now,
 	a_joingame,
 	a_select,
 	a_checkdisplayed,
+	a_undo_move,
 	a_back
 } action_t;
 
@@ -249,7 +251,15 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			break;
 		}
 		case a_setmovecursor: {
-			set_move_cursor(&web->client, ev->elem->i);
+			chess_client_set_move_cursor(&web->client, ev->elem->i);
+			break;
+		}
+		case a_setmovecursor_now: {
+			chess_client_set_move_cursor(&web->client, web->client.g.moves.length);
+			break;
+		}
+		case a_undo_move: {
+			chess_client_undo_move(&web->client);
 			break;
 		}
 	}
@@ -416,6 +426,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_set_attr(d, HTML_ATTR_CLASS, rotclass);
 			}
 
+			html_start_div(ui, "info", 0);
 			html_start_div(ui, "moves", 1);
 			vector_iterator move_iter = vector_iterate(&web->client.g.moves);
 			while (vector_next(&move_iter)) {
@@ -430,7 +441,12 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				drop(pgn);
 			}
 
-			html_event(ui, html_p(ui, NULL, "now"), html_click, a_setmovecursor);
+			html_end(ui);
+
+			html_event(ui, html_button(ui, "now", "now"), html_click, a_setmovecursor_now);
+			if (web->client.g.last_player == web->client.player)
+				html_event(ui, html_button(ui, "undo", "undo"), html_click, a_undo_move);
+
 			html_end(ui);
 
 			html_start_table(ui, "board");

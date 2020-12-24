@@ -21,6 +21,7 @@ typedef enum {
 	mp_join_game, //game id, player name
 	mp_make_move, //move_t
 	mp_leave_game, //nothing
+	mp_undo_move
 } mp_client_t;
 
 typedef enum {
@@ -35,11 +36,14 @@ typedef enum {
 
 	mp_game_joined, //join
 	mp_move_made, //packed move_t
-	mp_game_left //unsigned player
+	mp_game_left, //unsigned player
+
+	mp_move_undone
 } mp_serv_t;
 
 void write_players(vector_t* data, game_t* g) {
 	vector_pushcpy(data, &(char){(char)g->players.length});
+	vector_pushcpy(data, &(char){g->last_player});
 	vector_pushcpy(data, &(char){g->player});
 
 	vector_iterator p_iter = vector_iterate(&g->players);
@@ -62,6 +66,7 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 	g->players = vector_new(sizeof(player_t));
 	char num_players = read_chr(cur);
 	if (num_players==0) cur->err=1;
+	g->last_player = read_chr(cur);
 	g->player = read_chr(cur);
 	for (char i=0; i<num_players; i++) {
 		player_t* p = vector_push(&g->players);
@@ -230,22 +235,25 @@ void refresh_hints(chess_client_t* client) {
 	}
 }
 
-void set_move_cursor(chess_client_t* client, unsigned i) {
-	if (i<client->move_cursor) {
-		client->move_cursor=0;
-		vector_free(&client->g.board);
-		vector_cpy(&client->g.init_board, &client->g.board);
+void set_move_cursor(game_t* g, unsigned* cur, unsigned i) {
+	if (i<*cur) {
+		*cur=0;
+		vector_free(&g->board);
+		vector_cpy(&g->init_board, &g->board);
 	}
 
-	for (;client->move_cursor<i;client->move_cursor++) {
-		move_t* m = vector_get(&client->g.moves, client->move_cursor);
-		move_swap(&client->g, m);
+	for (;*cur<i;(*cur)++) {
+		move_t* m = vector_get(&g->moves, *cur);
+		move_swap(g, m);
 	}
+}
+
+void chess_client_set_move_cursor(chess_client_t* client, unsigned i) {
+	set_move_cursor(&client->g, &client->move_cursor, i);
 }
 
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make) {
 	client->mode = mode;
-	client->g.m.takeback=0;
 
 	if (make) {
 		client->player = 0;
@@ -265,6 +273,14 @@ void pnum_leave(game_t* g, unsigned pnum) {
 	} else {
 		drop(vector_removeptr(&g->m.spectators, pnum-g->players.length));
 	}
+}
+
+void chess_client_moveundone(chess_client_t* client) {
+	if (client->move_cursor==client->g.moves.length) {
+		chess_client_set_move_cursor(client, client->g.moves.length - 1);
+	}
+
+	undo_move(&client->g);
 }
 
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
@@ -340,6 +356,10 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 			refresh_hints(client);
 			break;
 		}
+		case mp_move_undone: {
+			chess_client_moveundone(client);
+			break;
+		}
 		default:;
 	}
 
@@ -366,7 +386,7 @@ int client_make_move(chess_client_t* client) {
 			refresh_hints(client);
 		} else if (client->mode==mode_multiplayer) {
 			vector_t data = vector_new(1);
-			vector_pushcpy(&data, &(char){(char)mp_make_move});
+			vector_pushcpy(&data, &(char){mp_make_move});
 			write_move(&data, &client->select);
 
 			client_send(client->net, &data);
@@ -379,9 +399,20 @@ int client_make_move(chess_client_t* client) {
 	}
 }
 
+void chess_client_undo_move(chess_client_t* client) {
+	if (client->mode==mode_multiplayer) {
+		vector_t data = vector_new(1);
+		vector_pushcpy(&data, &(char){mp_undo_move});
+		client_send(client->net, &data);
+		vector_free(&data);
+	}
+
+	chess_client_moveundone(client);
+}
+
 void chess_client_gamelist(chess_client_t* client) {
 	client->game_list = vector_new(sizeof(char*));
-	client_send(client->net, &(vector_t){.data=(char[]){(char)mp_list_game}, .length=1});
+	client_send(client->net, &(vector_t){.data=(char[]){mp_list_game}, .length=1});
 }
 
 void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
@@ -393,7 +424,7 @@ void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
 
 	vector_t data = vector_new(1);
 
-	vector_pushcpy(&data, &(char){(char)mp_make_game});
+	vector_pushcpy(&data, &(char){mp_make_game});
 
 	write_str(&data, g_name);
 	write_game(&data, &client->g);
@@ -406,7 +437,7 @@ void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
 int chess_client_joingame(chess_client_t* client, unsigned i, char* name) {
 	vector_t data = vector_new(1);
 
-	vector_pushcpy(&data, &(char){(char)mp_join_game});
+	vector_pushcpy(&data, &(char){mp_join_game});
 	write_uint(&data, i);
 	write_str(&data, name ? name : "");
 
@@ -421,7 +452,7 @@ void chess_client_leavegame(chess_client_t* client) {
 	if (client->mode==mode_multiplayer) {
 		vector_t data = vector_new(1);
 
-		vector_pushcpy(&data, &(char){(char)mp_leave_game});
+		vector_pushcpy(&data, &(char){mp_leave_game});
 		client_send(client->net, &data);
 		vector_free(&data);
 		mp_extra_free(&client->g.m);

@@ -27,6 +27,15 @@ void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned n
 	}
 }
 
+int game_in(chess_server_t* cserv, unsigned i, mp_game_t** mg, unsigned* pnum) {
+	mp_game_t** mg_ref = map_find(&cserv->num_joined, &i);
+	if (!mg_ref) return 0;
+
+	*mg = *mg_ref;
+	*pnum = vector_search(&(*mg_ref)->player_num, &i)-1;
+	return 1;
+}
+
 void leave_game(chess_server_t* cserv, unsigned i) {
 	if (vector_search_remove(&cserv->num_lobby, &i)) return;
 
@@ -54,7 +63,7 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	if (!left) {
 		unsigned g_i = vector_search(&cserv->games, &mg)-1;
 
-		vector_pushcpy(&data, &(char){(char)mp_game_list_removed});
+		vector_pushcpy(&data, &(char){mp_game_list_removed});
 		write_uint(&data, g_i);
 		broadcast(cserv, &cserv->num_lobby, &data, 0);
 
@@ -69,7 +78,7 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	} else {
 		pnum_leave(&mg->g, pnum);
 
-		vector_pushcpy(&data, &(char){(char)mp_game_left});
+		vector_pushcpy(&data, &(char){mp_game_left});
 		write_uint(&data, pnum);
 		broadcast(cserv, &mg->player_num, &data, 0);
 	}
@@ -94,7 +103,7 @@ int main(int argc, char** argv) {
 			case mp_list_game: {
 				leave_game(&cserv, i);
 
-				vector_pushcpy(&resp, &(char){(char)mp_game_list});
+				vector_pushcpy(&resp, &(char){mp_game_list});
 				write_uint(&resp, cserv.games.length);
 
 				vector_iterator game_iter = vector_iterate(&cserv.games);
@@ -122,7 +131,6 @@ int main(int argc, char** argv) {
 
 				mp_game_t* mg = heapcpy(sizeof(mp_game_t), &(mp_game_t){.g=g, .name=g_name, .player_num=vector_new(sizeof(unsigned))});
 				mg->g.m.spectators = vector_new(sizeof(char*));
-				mg->g.m.takeback = 0;
 
 				map_insertcpy(&cserv.num_joined, &i, &mg);
 
@@ -130,12 +138,12 @@ int main(int argc, char** argv) {
 
 				vector_pushcpy(&cserv.games, &mg);
 				
-				vector_pushcpy(&resp, &(char){(char)mp_game_list_new});
+				vector_pushcpy(&resp, &(char){mp_game_list_new});
 				write_str(&resp, g_name);
 				broadcast(&cserv, &cserv.num_lobby, &resp, 0);
 				vector_clear(&resp);	
 
-				vector_pushcpy(&resp, &(char){(char)mp_game_made});
+				vector_pushcpy(&resp, &(char){mp_game_made});
 
 				break;
 			}
@@ -175,7 +183,7 @@ int main(int argc, char** argv) {
 
 				unsigned pnum = spectate ? p_iter.i-1 + mg->g.m.spectators.length-1 : p_iter.i-1;
 
-				vector_pushcpy(&resp, &(char){(char)mp_game_joined});
+				vector_pushcpy(&resp, &(char){mp_game_joined});
 				write_uint(&resp, pnum);
 				write_str(&resp, spectate ? name : p->name);
 
@@ -185,7 +193,7 @@ int main(int argc, char** argv) {
 				map_insertcpy(&cserv.num_joined, &i, &mg);
 
 				vector_clear(&resp);
-				vector_pushcpy(&resp, &(char){(char)mp_game});
+				vector_pushcpy(&resp, &(char){mp_game});
 
 				write_game(&resp, &mg->g);
 				write_spectators(&resp, &mg->g.m);
@@ -195,20 +203,34 @@ int main(int argc, char** argv) {
 				break;
 			}
 			case mp_make_move: {
-				mp_game_t** mg_ref = map_find(&cserv.num_joined, &i);
+				mp_game_t* mg;
+				unsigned player;
 				move_t m = read_move(&cur);
-				if (!mg_ref || cur.err) break;
 
-				mp_game_t* mg = *mg_ref;
-				unsigned player = vector_search(&mg->player_num, &i)-1;
-
+				if (!game_in(&cserv, i, &mg, &player) || cur.err) break;
 				if (make_move(&mg->g, &m, 1, 1, (char)player) != move_success) break;
 
-				vector_pushcpy(&resp, &(char){(char)mp_move_made});
+				vector_pushcpy(&resp, &(char){mp_move_made});
 				write_move(&resp, &m);
 				broadcast(&cserv, &mg->player_num, &resp, i);
 				vector_clear(&resp);
 
+				break;
+			}
+			case mp_undo_move: {
+				mp_game_t* mg;
+				unsigned player;
+				if (!game_in(&cserv, i, &mg, &player)) break;
+				if (mg->g.last_player!=player) break;
+
+				unsigned move_cur = mg->g.moves.length;
+				set_move_cursor(&mg->g, &move_cur, mg->g.moves.length-1);
+
+				undo_move(&mg->g);
+
+				vector_pushcpy(&resp, &(char){mp_move_undone});
+				broadcast(&cserv, &mg->player_num, &resp, i);
+				vector_clear(&resp);
 				break;
 			}
 			case mp_leave_game: {

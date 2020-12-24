@@ -54,7 +54,6 @@ typedef enum {
 
 typedef struct {
 	vector_t spectators;
-	char takeback; //takeback pending for cur player
 } mp_extra_t;
 
 typedef struct {
@@ -64,6 +63,7 @@ typedef struct {
 	vector_t init_board;
 	vector_t board;
 	vector_t moves;
+	char last_player;
 	char player; //of current move
 	char won;
 
@@ -171,8 +171,6 @@ int piece_long_range(piece_ty ty) {
 
 //valid move, no check check
 int valid_move(game_t* g, move_t* m) {
-	if (m->to[0]>=g->board_w||m->to[0]<0||m->to[1]>=g->board_h||m->to[1]<0) return 0;
-
 	int off[2] = {m->to[0] - m->from[0], m->to[1] - m->from[1]};
 
 	piece_t* p = board_get(g, m->from);
@@ -234,9 +232,8 @@ int valid_move(game_t* g, move_t* m) {
 
 	//anything that moves horizontal, vertical, diagonal
 	if (collision) {
-		int di = max(off[0], off[1]);
-		if (di==0) return 0;
-		int adi = abs(di);
+		int adi = max(abs(off[0]), abs(off[1]));
+		if (adi==0) return 0;
 
 		off[0] /= adi;
 		off[1] /= adi;
@@ -458,6 +455,31 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 	}
 }
 
+int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
+	//special case; pawns dont take pieces when colliding, so pos to to is invalid if to is blocking pawn
+	if (p->ty==p_pawn) {
+		int off[2] = {pos[0]-other[0], pos[1]-other[1]};
+
+		int dir[2];
+		pawn_dir(dir, p->flags);
+		struct pawn_adj adj = pawn_adjacent(dir);
+		return i2eq(off, adj.adj[0]) || i2eq(off, adj.adj[1]) || i2eq(off, dir)
+					|| (p->flags & pawn_firstmv && i2eq(off, (int[2]){dir[0]*2, dir[1]*2}));
+	}
+
+	if (!piece_long_range(p->ty)) return 0; //knights (or other??? short range pieces other than pawn) arent affected
+
+	move_t m = {.from={pos[0], pos[1]}, .to={other[0], other[1]}};
+
+	//is this seriously faster than just repeating piece_moves
+	//update: yes
+	return valid_move(g, &m);
+}
+
+int piece_moves_modified(game_t* g, piece_t* p, int pos[2], move_t* m) {
+	return piece_moves_modified_other(g, p, pos, m->from) || piece_moves_modified_other(g, p, pos, m->to);
+}
+
 void next_player(game_t* g) {
 	char player = g->player;
 	player_t* t_next;
@@ -473,48 +495,10 @@ void next_player(game_t* g) {
 	} while (t_next->mate);
 }
 
-enum {
-	move_invalid,
-	move_turn,
-	move_player,
-	move_success
-} make_move(game_t* g, move_t* m, int validate, int make, char player) {
-	piece_t* from = board_get(g, m->from);
-	player_t* t = vector_get(&g->players, player);
-
-	if (validate) {
-		if (!from || !t) return move_invalid;
-		if (g->player != player || t->mate) return move_turn;
-		if (from->ty == p_empty || from->player != player) return move_player;
-		if (i2eq(m->from, m->to)) return move_invalid;
-	}
-
-	piece_t* to = board_get(g, m->to);
-
-	if (validate) {
-		if (to->ty == p_blocked || (to->ty != p_empty && to->player == player))
-			return move_invalid;
-		if (!valid_move(g, m)) return move_invalid;
-	}
-
-	if (make || validate) {
-		move_swap(g, m);
-	}
-
-	if (validate && player_check(g, player, t)) {
-		unmove_swap(g, m);
-		return move_invalid;
-	}
-
-	if (!make && validate) {
-		unmove_swap(g, m);
-	}
-
-	//update checks and mates
+void update_checks_mates(game_t* g) {
 	vector_iterator t_iter = vector_iterate(&g->players);
 	while (vector_next(&t_iter)) {
 		player_t* t2 = t_iter.x;
-		if (t_iter.i-1 == player) continue;
 
 		if (player_check(g, (char)(t_iter.i-1), t2)) {
 			t2->check=1;
@@ -538,11 +522,61 @@ enum {
 			t2->check=0;
 		}
 	}
+}
 
+enum {
+	move_invalid,
+	move_turn,
+	move_player,
+	move_success
+} make_move(game_t* g, move_t* m, int validate, int make, char player) {
+	piece_t* from = board_get(g, m->from);
+	player_t* t = vector_get(&g->players, player);
+
+	if (validate) {
+		if (!from || !t) return move_invalid;
+		if (g->player != player || t->mate) return move_turn;
+		if (from->ty == p_empty || from->player != player) return move_player;
+		if (i2eq(m->from, m->to)) return move_invalid;
+	}
+
+	piece_t* to = board_get(g, m->to);
+
+	if (validate) {
+		if (!to || to->ty == p_blocked || (to->ty != p_empty && to->player == player))
+			return move_invalid;
+		if (!valid_move(g, m)) return move_invalid;
+	}
+
+	if (make || validate) {
+		move_swap(g, m);
+	}
+
+	if (validate && player_check(g, player, t)) {
+		unmove_swap(g, m);
+		return move_invalid;
+	}
+
+	if (!make && validate) {
+		unmove_swap(g, m);
+	}
+
+	update_checks_mates(g);
+
+	g->last_player = g->player;
 	next_player(g);
 	vector_pushcpy(&g->moves, m);
 
 	return move_success;
+}
+
+void undo_move(game_t* g) {
+	vector_pop(&g->moves);
+	g->player = g->last_player;
+	g->last_player=-1;
+	g->won=0;
+
+	update_checks_mates(g);
 }
 
 int clamp(int x, int min, int max) {
@@ -674,6 +708,7 @@ game_t parse_board(char* str) {
 
 	vector_cpy(&g.board, &g.init_board);
 	g.moves = vector_new(sizeof(move_t));
+	g.last_player = -1;
 	g.player = 0;
 	g.won=0;
 	g.flags=0;

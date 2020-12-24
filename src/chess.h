@@ -49,7 +49,6 @@ typedef enum {
 } game_flags_t;
 typedef struct {
 	vector_t spectators;
-	char takeback; //takeback pending for cur player
 } mp_extra_t;
 typedef struct {
 	game_flags_t flags;
@@ -58,6 +57,7 @@ typedef struct {
 	vector_t init_board;
 	vector_t board;
 	vector_t moves;
+	char last_player;
 	char player; //of current move
 	char won;
 
@@ -69,6 +69,7 @@ typedef struct {
 piece_t* board_get(game_t* g, int x[2]);
 int piece_i(game_t* g, piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
+int piece_edible(piece_t* p);
 int piece_owned(piece_t* p, char player);
 int board_pos_next(game_t* g, int* x);
 int player_check(game_t* g, char p_i, player_t* player);
@@ -76,6 +77,7 @@ void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
 void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
 void move_swap(game_t* g, move_t* m);
 void piece_moves(game_t* g, piece_t* p, vector_t* moves);
+int piece_moves_modified(game_t* g, piece_t* p, int pos[2], move_t* m);
 void next_player(game_t* g);
 enum {
 	move_invalid,
@@ -83,5 +85,6 @@ enum {
 	move_player,
 	move_success
 } make_move(game_t* g, move_t* m, int validate, int make, char player);
+void undo_move(game_t* g);
 game_t parse_board(char* str);
 char* move_pgn(game_t* g, move_t* m);

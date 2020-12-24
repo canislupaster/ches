@@ -123,15 +123,21 @@
             padding: 10px;
         }
 
-        #moves {
+        #info {
             grid-column: 4;
             grid-row: 1/5;
             margin: 0 0 0 1em;
-            overflow-y: auto;
-            height: 80vh;
+
+            display: flex;
+            flex-direction: column;
         }
 
-        #moves p {
+        #info #moves {
+            overflow-y: auto;
+            height: 70vh;
+        }
+
+        #info #moves p {
             cursor: pointer;
         }
 
