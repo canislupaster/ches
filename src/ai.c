@@ -21,9 +21,9 @@ float piecety_value(piece_ty ty) {
 #define AI_MAX_LOSS 10 //queen
 #define AI_RANGEVAL 0
 
-#define AI_DEPTH 3 //base search
+#define AI_DEPTH 2 //base search
 #define AI_MAXDEPTH 6 //absolute maximum depth, including with extensions
-#define AI_EXPECTEDLEN 19 //more than 10 pieces per move, otherwise extend by log2(10/len)
+#define AI_EXPECTEDLEN 35 //more than this number of moves, otherwise extend by log2(expected/len)
 #define AI_MAXPLAYER 127
 
 char finddepth(unsigned len) {
@@ -47,6 +47,7 @@ typedef struct {
 	move_t* m;
 	piece_t piece_from;
 	piece_t piece_to;
+	char checks[AI_MAXPLAYER];
 	char player;
 } branch_t;
 
@@ -61,6 +62,7 @@ typedef struct move_vecs {
 	vector_t moves; //piece_moves_t
 
 	branch_t branches[AI_MAXDEPTH];
+	char checks[AI_MAXPLAYER];
 
 	char ai_player;
 	//extend depth of search depending on complexity
@@ -86,6 +88,7 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 
 void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t* m) {
 	b->m = m;
+	b->player=g->player;
 
 	piece_t* from = board_get(g, b->m->from);
 	piece_t* to = board_get(g, b->m->to);
@@ -95,18 +98,31 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t*
 	
 	move_noswap(g, b->m, from, to);
 
+	vector_iterator player_iter = vector_iterate(&g->players);
+	while (vector_next(&player_iter)) {
+		if (player_iter.i-1==b->player) continue;
+		
+		char check = (char)player_check(g, player_iter.i-1, player_iter.x);
+		if (check!=vecs->checks[player_iter.i-1]) {
+			b->checks[player_iter.i-1] = 1;
+			vecs->checks[player_iter.i-1] = check;
+		}
+	}
+
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
+
 		if (!piece_edible(pmoves->p)) continue;
-		if (pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, b->m)) {
+
+		if (vecs->checks[pmoves->p->player] || pmoves->p==to
+				|| piece_moves_modified(g, pmoves->p, pmoves->pos, b->m)) {
 			vector_clear(&pmoves->moves);
 			piece_moves(g, pmoves->p, &pmoves->moves);
 			pmoves->modified[depth] = 1;
 		}
 	}
 
-	b->player=g->player;
 	next_player(g);
 }
 
@@ -122,10 +138,19 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
-		if (pmoves->p==to || pmoves->p==from || pmoves->modified[depth]) {
+		if (pmoves->p==from || pmoves->modified[depth]) {
 			vector_clear(&pmoves->moves);
 			piece_moves(g, pmoves->p, &pmoves->moves);
 			pmoves->modified[depth] = 0;
+		}
+	}
+
+	for (char i=0; i<g->players.length; i++) {
+		if (i==b->player) continue;
+
+		if (b->checks[i]) {
+			vecs->checks[i] = (char)!vecs->checks[i];
+			b->checks[i] = 0;
 		}
 	}
 
@@ -135,11 +160,13 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
 move_vecs_t g_move_vecs = {.init=0};
 
 float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_out) {
+	float gain=-INFINITY;
+
+	int exchange = depth>=vecs->finddepth;
 	if (v<-AI_MAX_LOSS) {
-		return -CHECKMATE_CURVE[depth+1];
+		exchange=1;
 	}
 
-	float gain=-INFINITY;
 	float eqmvs=1;
 
 	move_t m;
@@ -156,8 +183,10 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_
 			piece_t* target = board_get(g, pos);
 
 			int e = piece_edible(target);
-			if (depth>=vecs->finddepth && !e)
+			if (exchange && !e) {
+				if (gain==-INFINITY) gain=v;
 				continue;
+			}
 
 			float v2 = v;
 			if (e) v2 += piece_value(g, vecs, target);
@@ -181,7 +210,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_
 			if (v2>gain) {
 				gain=v2;
 				eqmvs=1;
-				*m_out = m;
+				if (depth==0) *m_out = m;
 			} else if (depth==0 && v2==gain) {
 				if ((float)RAND_MAX/(float)rand() > ++eqmvs)
 					*m_out = m;
@@ -195,6 +224,11 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_
 
 void ai_make_move(game_t* g) {
 	if (!g_move_vecs.init) {
+		for (char i=0; i<AI_MAXDEPTH; i++) {
+			memset(g_move_vecs.branches[i].checks, 0, AI_MAXPLAYER);
+		}
+
+		memset(g_move_vecs.checks, 0, AI_MAXPLAYER);
 		g_move_vecs.moves = vector_new(sizeof(piece_moves_t));
 		g_move_vecs.init=1;
 	}

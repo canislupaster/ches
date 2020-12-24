@@ -458,7 +458,7 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
 	//special case; pawns dont take pieces when colliding, so pos to to is invalid if to is blocking pawn
 	if (p->ty==p_pawn) {
-		int off[2] = {pos[0]-other[0], pos[1]-other[1]};
+		int off[2] = {other[0]-pos[0], other[1]-pos[1]};
 
 		int dir[2];
 		pawn_dir(dir, p->flags);
@@ -467,9 +467,15 @@ int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
 					|| (p->flags & pawn_firstmv && i2eq(off, (int[2]){dir[0]*2, dir[1]*2}));
 	}
 
-	if (!piece_long_range(p->ty)) return 0; //knights (or other??? short range pieces other than pawn) arent affected
-
 	move_t m = {.from={pos[0], pos[1]}, .to={other[0], other[1]}};
+
+	if (piece_long_range(p->ty)) {
+		if (board_get(g, other)->player==p->player) {
+			return valid_move(g, &m);
+		} else {
+			return 0;
+		}
+	}
 
 	//is this seriously faster than just repeating piece_moves
 	//update: yes
