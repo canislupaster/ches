@@ -65,4 +65,4 @@ if(EMSCRIPTEN)
     target_link_libraries(termchess corecommon)
 endif()
 
-target_link_libraries(termchess_server corecommon)
+target_link_libraries(termchess_server corecommon m) #libm/math
