@@ -14,6 +14,7 @@ float piecety_value(piece_ty ty) {
 		case p_knight: return 3;
 		case p_chancellor: return 9;
 		case p_archibishop: return 7;
+		case p_heir:
 		case p_king: return 2;
 		default: return 0;
 	}
