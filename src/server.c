@@ -32,7 +32,7 @@ int game_in(chess_server_t* cserv, unsigned i, mp_game_t** mg, unsigned* pnum) {
 	if (!mg_ref) return 0;
 
 	*mg = *mg_ref;
-	*pnum = vector_search(&(*mg_ref)->player_num, &i)-1;
+	*pnum = vector_search(&(*mg_ref)->player_num, &i);
 	return 1;
 }
 
@@ -50,7 +50,7 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		unsigned* num = pnum_iter.x;
 		if (*num == i) {
 			*num = 0;
-			pnum = pnum_iter.i-1;
+			pnum = pnum_iter.i;
 		} else if (*num>0) {
 			left=1;
 		}
@@ -61,7 +61,7 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	vector_t data = vector_new(1);
 	
 	if (!left) {
-		unsigned g_i = vector_search(&cserv->games, &mg)-1;
+		unsigned g_i = vector_search(&cserv->games, &mg);
 
 		vector_pushcpy(&data, &(char){mp_game_list_removed});
 		write_uint(&data, g_i);
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
 				  break;
 				}
 
-				int spectate = p_iter.i-1==mg->g.players.length;
+				int spectate = p_iter.i==mg->g.players.length;
 				if (spectate) {
 					vector_pushcpy(&mg->g.m.spectators, &name);
 				} else {
@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
 					}
 				}
 
-				unsigned pnum = spectate ? p_iter.i-1 + mg->g.m.spectators.length-1 : p_iter.i-1;
+				unsigned pnum = spectate ? p_iter.i + mg->g.m.spectators.length-1 : p_iter.i;
 
 				vector_pushcpy(&resp, &(char){mp_game_joined});
 				write_uint(&resp, pnum);
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
 				if (mg->g.last_player!=player) break;
 
 				unsigned move_cur = mg->g.moves.length;
-				set_move_cursor(&mg->g, &move_cur, mg->g.moves.length-1);
+				set_move_cursor(&mg->g, &move_cur, mg->g.last_move);
 
 				undo_move(&mg->g);
 

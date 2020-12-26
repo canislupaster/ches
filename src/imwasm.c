@@ -8,8 +8,6 @@
 
 #define HTML_STACK_SZ 10
 
-typedef char* html_attrib[2];
-
 struct html_elem;
 struct html_ui;
 
@@ -18,6 +16,8 @@ typedef enum {
 	html_keypress,
 	html_onchange,
 	html_timeout,
+	html_drag,
+	html_drop,
 	html_custom
 } html_event_ty;
 
@@ -25,6 +25,8 @@ typedef struct {
 	html_event_ty ty;
 	struct html_ui* ui;
 	unsigned action;
+
+	char* dropdata;
 
 	union {
 		struct html_elem* elem;
@@ -37,6 +39,19 @@ typedef enum {
 	html_list = 2,
 	html_list_child = 4
 } html_elem_flags_t;
+
+typedef enum {
+	html_class,
+	html_value,
+	html_draggable,
+	html_attrib
+} html_attr_ty_t;
+
+typedef struct {
+	html_attr_ty_t ty;
+	char* name;
+	char* val;
+} html_attr_t;
 
 typedef struct html_elem {
 	html_elem_flags_t flags;
@@ -116,11 +131,14 @@ void html_send(html_ui_t* ui, unsigned action, void* data) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int html_cb(html_event_t* ev) {
+int html_cb(html_event_t* ev, char* dropdata) {
+	if (ev->ty==html_drop) ev->dropdata=dropdata;
+
 	ev->ui->update(ev->ui, ev, ev->ui->arg);
 	html_render(ev->ui);
 
 	if (ev->ty==html_timeout) drop(ev);
+	else if (ev->ty==html_drop) drop(ev->dropdata);
 
 	return EM_FALSE;
 }
@@ -130,21 +148,49 @@ void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data) {
 
 	MAIN_THREAD_EM_ASM({
 		window.setTimeout(()=>{
-			_html_cb($0);
+			_html_cb($0, 0);
 		}, $1);
 	}, ev, ms);
 }
 
+void html_playsound(html_ui_t* ui, char* sound, double vol) {
+	MAIN_THREAD_EM_ASM({
+		let sound = new Audio(UTF8ToString($0));
+		sound.volume = $1;
+		sound.play();
+	}, sound, vol);
+}
+
 void html_register_ev(html_elem_t* elem, html_event_t* ev, int rem) {
+	html_select(elem);
+	if (ev->ty==html_drop) {
+		MAIN_THREAD_EM_ASM({
+			elem.addEventListener("dragover", (ev) => {
+				ev.preventDefault();
+			});
+
+			elem.addEventListener("drop", (ev) => {
+				ev.preventDefault();
+
+				let v = ev.dataTransfer.getData("text/plain");
+				let len = lengthBytesUTF8(v)+1;
+				let buf = _malloc(len);
+				stringToUTF8(v, buf, len);
+
+				_html_cb($0, buf);
+			});
+		}, ev);
+	}
+
 	char* evstr;
 	switch (ev->ty) {
 		case html_click: evstr="click"; break;
 		case html_keypress: evstr="keypress"; break;
 		case html_onchange: evstr="change"; break;
+		case html_drag: evstr="dragstart"; break;
 		default: return;
 	}
 
-	html_select(elem);
 	if (rem) {
 		MAIN_THREAD_EM_ASM({
 			elem.removeEventListener(UTF8ToString($0), null);
@@ -152,7 +198,7 @@ void html_register_ev(html_elem_t* elem, html_event_t* ev, int rem) {
 	} else {
 		MAIN_THREAD_EM_ASM({
 			elem.addEventListener(UTF8ToString($0), (ev) => {
-				if (_html_cb($1)==1) ev.preventDefault();
+				if (_html_cb($1, 0)==1) ev.preventDefault();
 			});
 		}, evstr, ev);
 	}
@@ -179,9 +225,9 @@ void html_event(html_ui_t* ui, html_elem_t* elem, html_event_ty ty, unsigned act
 void html_elem_free(html_elem_t* elem) {
 	vector_iterator attrib_iter = vector_iterate(&elem->attribs);
 	while (vector_next(&attrib_iter)) {
-		char** attr = attrib_iter.x;
-		drop(attr[0]);
-		drop(attr[1]);
+		html_attr_t* attr = attrib_iter.x;
+		if (attr->ty==html_attrib) drop(attr->name);
+		drop(attr->val);
 	}
 
 	vector_iterator ev_iter = vector_iterate(&elem->events);
@@ -219,10 +265,10 @@ void html_elem_remove_down(html_ui_t* ui, html_elem_t* elem) {
 
 void html_elem_updateindices(html_elem_t* elem, unsigned from) {
 	vector_iterator child_iter = vector_iterate(&elem->parent->children);
-	child_iter.i = from;
+	child_iter.i = from-1;
 	while (vector_next(&child_iter)) {
 		html_elem_t* e = *(html_elem_t**)child_iter.x;
-		e->i = child_iter.i-1;
+		e->i = child_iter.i;
 	}
 }
 
@@ -335,8 +381,8 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 
 		elem->children = vector_new(sizeof(html_elem_t*));
 
-		elem->attribs = vector_new(sizeof(html_attrib));
-		elem->new_attribs = vector_new(sizeof(html_attrib));
+		elem->attribs = vector_new(sizeof(html_attr_t));
+		elem->new_attribs = vector_new(sizeof(html_attr_t));
 		elem->events = vector_new(sizeof(html_event_t*));
 
 		html_insert_elem(elem);
@@ -362,23 +408,12 @@ void html_end(html_ui_t* ui) {
 	ui->cur[ui->cur_i == 0 ? ui->cur_i : ui->cur_i--] = NULL;
 }
 
-//is it idiomatic if it makes my code look better act faster and be nicer
-//if needed can add more to reduce allocations
-char* HTML_ATTR_CLASS = "class";
-char* HTML_ATTR_VALUE = "value";
-
-int HTML_ATTR_CONSTS=2;
-char* HTML_ATTR_CONST[2] = {"class", "value"};
-
-void html_set_attr(html_elem_t* elem, char* name, char* val) {
-	for (int i=0; i<HTML_ATTR_CONSTS; i++) {
-		if (HTML_ATTR_CONST[i]==name) {
-			vector_pushcpy(&elem->new_attribs, &(char*[2]){name, val ? heapcpystr(val) : NULL});
-			return;
-		}
+void html_set_attr(html_elem_t* elem, html_attr_ty_t ty, char* name, char* val) {
+	if (name==NULL) {
+		vector_pushcpy(&elem->new_attribs, &(html_attr_t){.ty=ty, .name=name, .val=val ? heapcpystr(val) : NULL});
+	} else {
+		vector_pushcpy(&elem->new_attribs, &(html_attr_t){.ty=ty, .name=heapcpystr(name), .val=val ? heapcpystr(val) : NULL});
 	}
-
-	vector_pushcpy(&elem->new_attribs, &(char*[2]){heapcpystr(name), val ? heapcpystr(val) : NULL});
 }
 
 html_elem_t* html_start_div(html_ui_t* ui, char* id, int list) {
@@ -413,7 +448,7 @@ html_elem_t* html_start_td(html_ui_t* ui) {
 
 html_elem_t* html_img(html_ui_t* ui, char* id, char* src) {
 	html_elem_t* e = html_elem_new(ui, "img", id, NULL);
-	html_set_attr(e, "src", src);
+	html_set_attr(e, html_attrib, "src", src);
 	return e;
 }
 
@@ -439,32 +474,32 @@ html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
 
 html_elem_t* html_input(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
-	if (val) html_set_attr(e, HTML_ATTR_VALUE, val);
+	if (val) html_set_attr(e, html_value, NULL, val);
 	return e;
 }
 
 html_elem_t* html_checkbox(html_ui_t* ui, char* id, int checked) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
-	html_set_attr(e, "type", "checkbox");
-	if (checked) html_set_attr(e, "checked", NULL);
+	html_set_attr(e, html_attrib, "type", "checkbox");
+	if (checked) html_set_attr(e, html_attrib, "checked", NULL);
 	return e;
 }
 
 html_elem_t* html_textarea(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "textarea", id, NULL);
-	if (val) html_set_attr(e, HTML_ATTR_VALUE, val);
+	if (val) html_set_attr(e, html_value, NULL, val);
 	return e;
 }
 
 char* html_input_value(char* id) {
 	html_select_id(id);
 	return (char*)MAIN_THREAD_EM_ASM_INT({
-		let v = elem.value;
-		let len = lengthBytesUTF8(v)+1;
-		let buf = _malloc(len);
-		stringToUTF8(v, buf, len);
-		return buf;
-	});
+																				 let v = elem.value;
+																				 let len = lengthBytesUTF8(v)+1;
+																				 let buf = _malloc(len);
+																				 stringToUTF8(v, buf, len);
+																				 return buf;
+																			 });
 }
 
 int html_checked(char* id) {
@@ -474,14 +509,14 @@ int html_checked(char* id) {
 
 char* html_local_get(char* name) {
 	return (char*)MAIN_THREAD_EM_ASM_INT({
-		let v = window.localStorage.getItem(UTF8ToString($0));
-		if (v==null) return 0;
+																				 let v = window.localStorage.getItem(UTF8ToString($0));
+																				 if (v==null) return 0;
 
-		let len = lengthBytesUTF8(v)+1;
-		let buf = _malloc(len);
-		stringToUTF8(v, buf, len);
-		return buf;
-	}, name);
+																				 let len = lengthBytesUTF8(v)+1;
+																				 let buf = _malloc(len);
+																				 stringToUTF8(v, buf, len);
+																				 return buf;
+																			 }, name);
 }
 
 void html_local_set(char* name, char* val) {
@@ -521,47 +556,67 @@ int html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 	vector_iterator attrib_iter = vector_iterate(&elem->attribs);
 	vector_iterator new_attrib_iter;
 	while (vector_next(&attrib_iter)) {
-		char** attr = attrib_iter.x;
+		html_attr_t* attr = attrib_iter.x;
 		char del = 1;
 
 		new_attrib_iter = vector_iterate(&elem->new_attribs);
 		while (vector_next(&new_attrib_iter)) {
-			char** new_attr = new_attrib_iter.x;
+			html_attr_t* new_attr = new_attrib_iter.x;
 			//...
-			if ((new_attr[0]==attr[0] || streq(new_attr[0], attr[0]))
-					&& (new_attr[1] == attr[1] || (new_attr[1] && attr[1] && streq(new_attr[1], attr[1])))) {
-				old[new_attrib_iter.i - 1] = 1;
+			if ((new_attr->name==attr->name || streq(new_attr->name, attr->name))
+					&& (new_attr->val == attr->val || (new_attr->val && attr->val && streq(new_attr->val, attr->val)))) {
+				old[new_attrib_iter.i] = 1;
 				del = 0;
 			}
 		}
 
-		if (del) {
-			if (attr[0] == HTML_ATTR_CLASS) {
-				MAIN_THREAD_EM_ASM((elem.classList.remove(UTF8ToString($0))), attr[1]);
-			} else if (attr[0] == HTML_ATTR_VALUE) {
-				MAIN_THREAD_EM_ASM((elem.value="";));
-			} else {
-				MAIN_THREAD_EM_ASM((elem.removeAttribute(UTF8ToString($0))), attr[0]);
+		if (del) switch (attr->ty) {
+				case html_class:
+					MAIN_THREAD_EM_ASM((elem.classList.remove(UTF8ToString($0))), attr->val); break;
+				case html_value:
+					MAIN_THREAD_EM_ASM((elem.value="";)); break;
+				case html_draggable: {
+					MAIN_THREAD_EM_ASM({
+						 elem.addEventListener("dragstart", null);
+						 elem.setAttribute("draggable", "false");
+					});
+					break;
+				}
+				case html_attrib:
+					MAIN_THREAD_EM_ASM((elem.removeAttribute(UTF8ToString($0))), attr->name); break;
 			}
-		}
 
-		drop(attr[0]);
-		drop(attr[1]);
+		drop(attr->name);
+		drop(attr->val);
 	}
 
 	new_attrib_iter = vector_iterate(&elem->new_attribs);
 	while (vector_next(&new_attrib_iter)) {
-		char** new_attr = new_attrib_iter.x;
-		if (!old[new_attrib_iter.i - 1]) {
-			if (new_attr[0]==HTML_ATTR_CLASS) {
-				MAIN_THREAD_EM_ASM(elem.classList.add(UTF8ToString($0)), new_attr[1]);
-			} else if (new_attr[0]==HTML_ATTR_VALUE) {
-				MAIN_THREAD_EM_ASM(elem.value = UTF8ToString($0);, new_attr[1]);
-			} else if (new_attr[1]==NULL) {
-				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), ""), new_attr[0]);
-			} else {
-				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), UTF8ToString($1));, new_attr[0], new_attr[1]);
+		html_attr_t* new_attr = new_attrib_iter.x;
+		if (!old[new_attrib_iter.i]) switch (new_attr->ty) {
+				case html_class:
+					MAIN_THREAD_EM_ASM(elem.classList.add(UTF8ToString($0)), new_attr->val); break;
+				case html_value:
+					MAIN_THREAD_EM_ASM(elem.value = UTF8ToString($0);, new_attr->val); break;
+				case html_draggable: {
+					MAIN_THREAD_EM_ASM({
+						if ($0!=0) {
+							var s = UTF8ToString($0);
+							elem.addEventListener("dragstart", (ev) => {
+								ev.dataTransfer.setData("text/plain", s);
+							});
+						}
+
+						elem.setAttribute("draggable", "true");
+					}, new_attr->val);
+
+				break;
 			}
+			case html_attrib: if (new_attr->val==NULL) {
+				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), ""), new_attr->name);
+			} else {
+				MAIN_THREAD_EM_ASM(elem.setAttribute(UTF8ToString($0), UTF8ToString($1));, new_attr->name, new_attr->val);
+			} break;
 		}
 	}
 

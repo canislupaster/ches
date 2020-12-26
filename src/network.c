@@ -246,7 +246,7 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 			if (!pfd->revents) continue;
 
 			char hup=0;
-			if (poll_iter.i==1) {
+			if (poll_iter.i==0) {
 				int new = accept(pfd->fd, NULL, NULL);
 				vector_pushcpy(&serv->conns, &(struct pollfd){.fd=new, .events=POLLIN});
 				vector_pushcpy(&serv->nums, &serv->num);
@@ -254,11 +254,11 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 				map_insertcpy(&serv->num_conns, &serv->num, &new);
 				serv->num++;
 			} else if (pfd->revents & POLLHUP) {
-				*i = *(unsigned*)vector_get(&serv->nums, poll_iter.i-1);
+				*i = *(unsigned*)vector_get(&serv->nums, poll_iter.i);
 				hup=1;
 			} else if (pfd->revents & POLLIN) {
-				*i = *(unsigned*)vector_get(&serv->nums, poll_iter.i-1);
-				char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-2);
+				*i = *(unsigned*)vector_get(&serv->nums, poll_iter.i);
+				char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-1);
 
 				if (serv->upgrade && !*upgraded){
 					char linebuf[HTTP_LINE_BUF];
@@ -341,7 +341,7 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 					}
 				} else if (serv->upgrade) {
 					char exist=0;
-					server_msg_t* msg = vector_setget(&serv->msg, poll_iter.i-2, &exist);
+					server_msg_t* msg = vector_setget(&serv->msg, poll_iter.i-1, &exist);
 					if (!exist) {
 						msg->frames = vector_new(1);
 						msg->fin = 0;
@@ -374,24 +374,24 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 
 			if (hup) {
 				if (serv->upgrade) {
-					char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-2);
+					char* upgraded = vector_get(&serv->conn_upgrade, poll_iter.i-1);
 					if (*upgraded) {
 						write_frame(pfd->fd, ws_close, NULL);
 					}
 
-					vector_remove(&serv->conn_upgrade, poll_iter.i-2);
+					vector_remove(&serv->conn_upgrade, poll_iter.i-1);
 
-					server_msg_t* msg = vector_get(&serv->msg, poll_iter.i-2);
+					server_msg_t* msg = vector_get(&serv->msg, poll_iter.i-1);
 					if (msg) {
 						vector_free(&msg->frames);
-						vector_remove(&serv->msg, poll_iter.i-2);
+						vector_remove(&serv->msg, poll_iter.i-1);
 					}
 				}
 
 				map_remove(&serv->num_conns, i);
 
-				vector_remove(&serv->conns, poll_iter.i-1);
-				vector_remove(&serv->nums, poll_iter.i-1);
+				vector_remove(&serv->conns, poll_iter.i);
+				vector_remove(&serv->nums, poll_iter.i);
 
 				poll_iter.i--;
 

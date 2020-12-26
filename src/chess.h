@@ -13,6 +13,7 @@ typedef enum {
 	p_pawn,
 	p_archibishop,
 	p_chancellor,
+	p_heir,
 	p_empty,
 	p_blocked
 } piece_ty;
@@ -37,6 +38,7 @@ typedef struct __attribute__ ((__packed__)) {
 typedef struct {
 	int board_rot;
 	int check, mate;
+	int ai;
 
 	int king;
 	char* name;
@@ -57,7 +59,10 @@ typedef struct {
 	vector_t init_board;
 	vector_t board;
 	vector_t moves;
+	//if player->ai, then not counted
 	char last_player;
+	unsigned last_move;
+
 	char player; //of current move
 	char won;
 
@@ -67,10 +72,11 @@ typedef struct {
 	mp_extra_t m;
 } game_t;
 piece_t* board_get(game_t* g, int x[2]);
-int piece_i(game_t* g, piece_t* ptr);
+int board_i(game_t* g, piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 int piece_edible(piece_t* p);
 int piece_owned(piece_t* p, char player);
+int is_ally(char p_i, player_t* p, char p2);
 int board_pos_next(game_t* g, int* x);
 int player_check(game_t* g, char p_i, player_t* player);
 void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);

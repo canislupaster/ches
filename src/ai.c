@@ -14,16 +14,17 @@ float piecety_value(piece_ty ty) {
 		case p_knight: return 3;
 		case p_chancellor: return 9;
 		case p_archibishop: return 7;
-		default: return 2;
+		case p_king: return 2;
+		default: return 0;
 	}
 }
 
 #define AI_MAX_LOSS 10 //queen
-#define AI_RANGEVAL 0
+#define AI_RANGEVAL 30
 
 #define AI_DEPTH 2 //base search
-#define AI_MAXDEPTH 6 //absolute maximum depth, including with extensions
-#define AI_EXPECTEDLEN 35 //more than this number of moves, otherwise extend by log2(expected/len)
+#define AI_MAXDEPTH 5 //absolute maximum depth, including with extensions
+#define AI_EXPECTEDLEN 45 //more than this number of moves, otherwise extend by log2(expected/len)
 #define AI_MAXPLAYER 127
 
 char finddepth(unsigned len) {
@@ -33,12 +34,14 @@ char finddepth(unsigned len) {
 //take shortest checkmate, no matter depth
 //weights indexed by how deep mate is or how many other players get turn
 //populated to depth or zeroed
-float CHECKMATE_CURVE[] = {INFINITY, 100, 75, 60, 50, 40, 35};
+float CHECKMATE_CURVE[] = {INFINITY, 100, 75, 60, 50, 40, 35, 30, 25};
 
 float checkmate_value(game_t* g, int d) {
 	player_t* p = vector_get(&g->players, g->player);
 	int check = player_check(g, g->player, p);
-	d += (int)g->players.length-2 + 1-check;
+	d += (int)g->players.length-2;
+
+	if (!check) return -CHECKMATE_CURVE[d]; //stalemate
 	if (d>=AI_MAXDEPTH+1) return CHECKMATE_CURVE[AI_MAXDEPTH];
 	else return CHECKMATE_CURVE[d];
 }
@@ -65,8 +68,11 @@ typedef struct move_vecs {
 	char checks[AI_MAXPLAYER];
 
 	char ai_player;
+	player_t* ai_p;
 	//extend depth of search depending on complexity
 	char finddepth;
+
+	move_t out_m;
 
 	int init;
 } move_vecs_t;
@@ -100,12 +106,19 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t*
 
 	vector_iterator player_iter = vector_iterate(&g->players);
 	while (vector_next(&player_iter)) {
-		if (player_iter.i-1==b->player) continue;
+		if (player_iter.i==b->player) {
+			if (vecs->checks[player_iter.i]!=0) {
+				b->checks[player_iter.i] = 1;
+				vecs->checks[player_iter.i] = 0;
+			}
+
+			continue;
+		}
 		
-		char check = (char)player_check(g, player_iter.i-1, player_iter.x);
-		if (check!=vecs->checks[player_iter.i-1]) {
-			b->checks[player_iter.i-1] = 1;
-			vecs->checks[player_iter.i-1] = check;
+		char check = (char)player_check(g, player_iter.i, player_iter.x);
+		if (check!=vecs->checks[player_iter.i]) {
+			b->checks[player_iter.i] = 1;
+			vecs->checks[player_iter.i] = check;
 		}
 	}
 
@@ -115,8 +128,9 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t*
 
 		if (!piece_edible(pmoves->p)) continue;
 
-		if (vecs->checks[pmoves->p->player] || pmoves->p==to
-				|| piece_moves_modified(g, pmoves->p, pmoves->pos, b->m)) {
+		//when having >2 players, update moves if check is still ongoing
+		if (b->checks[pmoves->p->player] || vecs->checks[pmoves->p->player]
+				|| pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, b->m)) {
 			vector_clear(&pmoves->moves);
 			piece_moves(g, pmoves->p, &pmoves->moves);
 			pmoves->modified[depth] = 1;
@@ -146,8 +160,6 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
 	}
 
 	for (char i=0; i<g->players.length; i++) {
-		if (i==b->player) continue;
-
 		if (b->checks[i]) {
 			vecs->checks[i] = (char)!vecs->checks[i];
 			b->checks[i] = 0;
@@ -159,13 +171,10 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
 
 move_vecs_t g_move_vecs = {.init=0};
 
-float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_out) {
+float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, int exchange) {
 	float gain=-INFINITY;
 
-	int exchange = depth>=vecs->finddepth;
-	if (v<-AI_MAX_LOSS) {
-		exchange=1;
-	}
+	exchange = exchange || depth>=vecs->finddepth || v<-AI_MAX_LOSS;
 
 	float eqmvs=1;
 
@@ -198,9 +207,9 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_
 				branch_enter(g, vecs, depth, b, &m);
 
 				//make the unrealistic assumption that all enemy teams are allied, benefits are shared
-				int inv = g->player==vecs->ai_player || b->player==vecs->ai_player;
-				v2 = ai_find_move(vecs, g, inv ? -v2 : v2, depth, NULL);
-				if (inv) v2 *= -1;
+				int inv = is_ally(vecs->ai_player, vecs->ai_p, g->player)!=is_ally(vecs->ai_player, vecs->ai_p, b->player);
+				v2 = ai_find_move(vecs, g, inv ? -v2 : v2, depth, exchange || v2<gain);
+				if (inv) v2*=-1;
 
 				branch_exit(g, vecs, depth, b);
 			}
@@ -210,15 +219,16 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, move_t* m_
 			if (v2>gain) {
 				gain=v2;
 				eqmvs=1;
-				if (depth==0) *m_out = m;
+				if (depth==0) vecs->out_m = m;
 			} else if (depth==0 && v2==gain) {
 				if ((float)RAND_MAX/(float)rand() > ++eqmvs)
-					*m_out = m;
+					vecs->out_m = m;
 			}
 		}
 	}
 
-	if (gain==-INFINITY) gain=-checkmate_value(g, depth);
+	if (gain==-INFINITY)
+		gain=-checkmate_value(g, depth);
 	return gain;
 }
 
@@ -234,6 +244,7 @@ void ai_make_move(game_t* g) {
 	}
 
 	g_move_vecs.ai_player = g->player;
+	g_move_vecs.ai_p = vector_get(&g->players, g->player);
 
 	unsigned len=0;
 
@@ -242,7 +253,8 @@ void ai_make_move(game_t* g) {
 	int pos[2] = {-1,0};
 	while (board_pos_next(g, pos)) {
 		piece_t* p = board_get(g, pos);
-		piece_moves_t pmoves = {.p=p, .pos={pos[0], pos[1]}, .modified={0}};
+		piece_moves_t pmoves = {.p=p, .pos={pos[0], pos[1]}};
+		memset(pmoves.modified, 0, AI_MAXDEPTH);
 		pmoves.moves = vector_new(sizeof(int[2]));
 		piece_moves(g, p, &pmoves.moves);
 
@@ -254,9 +266,9 @@ void ai_make_move(game_t* g) {
 	g_move_vecs.finddepth = finddepth(len/g->players.length);
 	printf("len %u depth %i\n", len, g_move_vecs.finddepth);
 
-	move_t m;
-	float v = ai_find_move(&g_move_vecs, g, 0, 0, &m);
-	printf("move value: %f\n", v);
+	float gain = ai_find_move(&g_move_vecs, g, 0, 0, 0);
+	printf("move value: %f\n", gain);
+	printf("%i\n", g_move_vecs.checks[1]);
 
-	make_move(g, &m, 0, 1, g->player);
+	make_move(g, &g_move_vecs.out_m, 0, 1, g->player);
 }

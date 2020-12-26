@@ -132,7 +132,7 @@ void read_board(cur_t* cur, game_t* g) {
 		p->player = read_chr(cur);
 
 		if (p->ty == p_king) {
-			((player_t*)vector_get(&g->players, p->player))->king = piece_i(g, p);
+			((player_t*)vector_get(&g->players, p->player))->king = board_i(g, p);
 		}
 	}
 }
@@ -252,17 +252,35 @@ void chess_client_set_move_cursor(chess_client_t* client, unsigned i) {
 	set_move_cursor(&client->g, &client->move_cursor, i);
 }
 
+void chess_client_ai(chess_client_t* client) {
+	while (!client->g.won) {
+		player_t* p = vector_get(&client->g.players, client->g.player);
+		if (!p->ai) break;
+
+		ai_make_move(&client->g);
+	}
+
+	client->move_cursor = client->g.moves.length;
+}
+
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make) {
 	client->mode = mode;
 
 	if (make) {
-		client->player = 0;
-		client->spectating = 0;
+		if (mode==mode_singleplayer) {
+			vector_iterator p_iter = vector_iterate(&client->g.players);
+			while (vector_next(&p_iter)) {
+				player_t* p = p_iter.x;
+				if (p_iter.i!=client->player) p->ai=1;
+			}
+		}
 
+		chess_client_ai(client);
+
+		client->spectating = 0;
 		client->g.m.spectators = vector_new(sizeof(char*));
 	}
 
-	client->move_cursor = client->g.moves.length;
 	client->hints = vector_new(sizeof(int[2]));
 }
 
@@ -277,7 +295,7 @@ void pnum_leave(game_t* g, unsigned pnum) {
 
 void chess_client_moveundone(chess_client_t* client) {
 	if (client->move_cursor==client->g.moves.length) {
-		chess_client_set_move_cursor(client, client->g.moves.length - 1);
+		chess_client_set_move_cursor(client, client->g.last_move);
 	}
 
 	undo_move(&client->g);
@@ -372,19 +390,15 @@ int client_make_move(chess_client_t* client) {
 	if (client->spectating || client->player != client->g.player
 			|| client->move_cursor!=client->g.moves.length) return 0;
 
-	if (vector_search(&client->hints, client->select.to)!=0) {
+	if (vector_search(&client->hints, client->select.to)!=-1) {
 		make_move(&client->g, &client->select, 0, 1, client->player);
-		client->move_cursor++;
 
-		//switch player or send move
 		if (client->mode==mode_singleplayer) {
-			while (client->g.player!=client->player && !client->g.won) {
-				ai_make_move(&client->g);
-				client->move_cursor++;
-			}
-
+			chess_client_ai(client);
 			refresh_hints(client);
 		} else if (client->mode==mode_multiplayer) {
+			client->move_cursor++;
+
 			vector_t data = vector_new(1);
 			vector_pushcpy(&data, &(char){mp_make_move});
 			write_move(&data, &client->select);

@@ -25,15 +25,17 @@ typedef struct {
 
 	char* err;
 	char* mp_name;
+	char* gname;
 	chess_client_t client;
 	enum {
 		menu_main,
 		menu_connect,
-		menu_chess_sp,
+		menu_chooseplayer,
 		menu_makegame
 	} menustate;
 
 	int menu_customboard;
+	int menu_multiplayer;
 	int which;
 
 	//apparently we need two booleans to determine whether the player has been checkmated and when to disable it
@@ -49,12 +51,15 @@ typedef enum {
 	a_netmsg,
 	a_connect,
 	a_makegame_menu,
+	a_chooseplayer,
 	a_makegame,
 	a_boardchange,
 	a_setmovecursor,
 	a_setmovecursor_now,
 	a_joingame,
 	a_select,
+	a_dropmove,
+	a_dragmove,
 	a_checkdisplayed,
 	a_undo_move,
 	a_back
@@ -75,7 +80,7 @@ void setup_game(chess_web_t* web) {
 	web->mate_change=1;
 }
 
-void update_dispcheck(html_ui_t* ui, chess_web_t* web) {
+void web_moved(html_ui_t* ui, chess_web_t* web) { //move fx
 	player_t* t = vector_get(&web->client.g.players, web->client.player);
 	if (!t->mate) {
 		web->mate_change=1;
@@ -85,8 +90,21 @@ void update_dispcheck(html_ui_t* ui, chess_web_t* web) {
 		web->check_displayed=0;
 	}
 
-	if (t->check && !web->check_displayed)
+	if (t->check && !web->check_displayed) {
 		html_settimeout(ui, 1000, a_checkdisplayed, NULL);
+		html_playsound(ui, "img/check.ogg", 0.2);
+	} else {
+		html_playsound(ui, "img/move.ogg", 0.2);
+	}
+}
+
+void web_move(html_ui_t* ui, chess_web_t* web) { //wrapper level=3
+	if (client_make_move(&web->client) && web->client.mode==mode_singleplayer) {
+		web_moved(ui, web);
+	}
+
+	web->client.select.from[0] = -1;
+	vector_clear(&web->client.hints);
 }
 
 void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
@@ -100,7 +118,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 					web->err = "that game is full, take another gamble";
 					break;
 				}
-				case mp_move_made: update_dispcheck(ui, web); break;
+				case mp_move_made: web_moved(ui, web); break;
 				default:;
 			}
 
@@ -110,10 +128,15 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			switch (web->client.mode) {
 				case mode_menu: switch (web->menustate) { //triple-switch
 					case menu_makegame: {
-						web->client.mode = mode_gamelist; break;
+						if (web->menu_multiplayer) web->client.mode = mode_gamelist;
+						else web->client.mode = menu_main;
+						break;
 					}
-					case menu_connect:
-					case menu_chess_sp: {
+					case menu_chooseplayer: {
+						game_free(&web->client.g);
+						if (web->menu_multiplayer) drop(web->gname);
+					}
+					case menu_connect: {
 						web->menustate = menu_main; break;
 					}
 					default:;
@@ -146,7 +169,8 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			web->menustate = menu_connect; break;
 		}
 		case a_singleplayer: {
-			web->menustate = menu_chess_sp; break;
+			web->menu_multiplayer=0;
+			web->menustate = menu_makegame; break;
 		}
 		case a_connect: {
 			char* addr = html_input_value("addr");
@@ -181,16 +205,17 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		}
 		case a_makegame_menu: {
 			web->client.mode = mode_menu;
+			web->menu_multiplayer=1;
 			web->menustate = menu_makegame;
 			break;
 		}
 		case a_boardchange: break;
-		case a_makegame: {
-			char* gname;
-			if (web->menustate==menu_makegame) {
-				gname = html_input_value("gname");
-				if (strlen(gname)==0) {
-					web->err="game name is empty"; break;
+		case a_chooseplayer: {
+			if (web->menu_multiplayer) {
+				web->gname = html_input_value("gname");
+				if (strlen(web->gname)==0) {
+					web->err="game name is empty";
+					drop(web->gname); break;
 				}
 			}
 
@@ -209,8 +234,19 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			if (html_checked("pawnpromotion"))
 				web->client.g.flags |= game_pawn_promotion;
 
-			chess_client_initgame(&web->client, web->menustate==menu_makegame?mode_multiplayer:mode_singleplayer, 1);
-			if (web->menustate==menu_makegame) chess_client_makegame(&web->client, gname, web->mp_name);
+			web->menustate = menu_chooseplayer;
+			break;
+		}
+		case a_makegame: {
+			char* p_i = html_input_value("players");
+			int p = atoi(p_i);
+			web->client.player = (char)p;
+
+			chess_client_initgame(&web->client, web->menu_multiplayer?mode_multiplayer:mode_singleplayer, 1);
+			if (web->menu_multiplayer) {
+				chess_client_makegame(&web->client, web->gname, web->mp_name);
+				drop(web->gname);
+			}
 			setup_game(web);
 			break;
 		}
@@ -227,23 +263,34 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		case a_select: {
 			player_t* t = vector_get(&web->client.g.players, web->client.player);
 
-			int select[2];
-			select[0] = (int)ev->elem->i;
-			select[1] = (int)ev->elem->parent->i;
+			int select[2] = {(int)ev->elem->i, (int)ev->elem->parent->i};
 			board_rot_pos(&web->client.g, t->board_rot, select, web->which==0?web->client.select.from:web->client.select.to);
 
 			if (web->which==1) {
-				if (client_make_move(&web->client) && web->client.mode==mode_singleplayer) {
-					update_dispcheck(ui, web);
-				}
-
-				web->client.select.from[0] = -1;
-				vector_clear(&web->client.hints);
+				web_move(ui, web);
 			} else {
 				refresh_hints(&web->client);
 			}
 
 			web->which=!web->which;
+			break;
+		}
+		case a_dragmove: {
+			player_t* t = vector_get(&web->client.g.players, web->client.player);
+			int select[2] = {(int)ev->elem->i, (int)ev->elem->parent->i};
+			board_rot_pos(&web->client.g, t->board_rot, select, web->client.select.from);
+
+			refresh_hints(&web->client);
+			break;
+		}
+		case a_dropmove: {
+			player_t* t = vector_get(&web->client.g.players, web->client.player);
+			int select[2] = {(int)ev->elem->i, (int)ev->elem->parent->i};
+			board_rot_pos(&web->client.g, t->board_rot, select, web->client.select.to);
+
+			web_move(ui, web);
+			web->which=0;
+
 			break;
 		}
 		case a_checkdisplayed: {
@@ -315,17 +362,18 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				break;
 			}
 			case menu_makegame: {
-				html_p(ui, "p1", "game name:");
-				html_input(ui, "gname", "");
-			}
-			case menu_chess_sp: {
+				if (web->menu_multiplayer) {
+					html_p(ui, "p1", "game name:");
+					html_input(ui, "gname", "");
+				}
+
 				html_p(ui, "gtype", "game type:");
 
 				html_elem_t* s = html_start_select(ui, "boards");
 				for (int i=0; i<NUM_BOARDS; i++) {
 					html_elem_t* e = html_option(ui, NULL, boards[i*2]);
 					char* istr = heapstr("%i", i);
-					html_set_attr(e, "value", istr);
+					html_set_attr(e, html_attrib, "value", istr);
 					drop(istr);
 				}
 
@@ -346,8 +394,29 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_checkbox(ui, "pawnpromotion", 1);
 				html_end(ui);
 
-				html_elem_t* e = html_button(ui, "make", "make game");
-				html_event(ui, e, html_click, a_makegame);
+				html_elem_t* e = html_button(ui, "next", "next");
+				html_event(ui, e, html_click, a_chooseplayer);
+				break;
+			}
+			case menu_chooseplayer: {
+				html_p(ui, "choose", "now devise your character:");
+
+				html_start_select(ui, "players");
+				vector_iterator p_iter = vector_iterate(&web->client.g.players);
+				while (vector_next(&p_iter)) {
+					player_t* p = p_iter.x;
+
+					html_elem_t* e = html_option(ui, NULL, p->name);
+					char* istr = heapstr("%i", p_iter.i);
+					html_set_attr(e, html_attrib, "value", istr);
+					drop(istr);
+				}
+
+				html_end(ui);
+
+				html_elem_t* b = html_button(ui, "make", "make thy gracious game");
+				html_event(ui, b, html_click, a_makegame);
+
 				break;
 			}
 		} break;
@@ -417,13 +486,13 @@ void render(html_ui_t* ui, chess_web_t* web) {
 
 				html_elem_t* d = html_start_div(ui, NULL, 1);
 				char* name = p->name;
-				if (web->client.g.player==t_iter.i-1)
+				if (web->client.g.player==t_iter.i)
 					name = heapstr(web->client.g.won ? "👑 %s" : "%s's turn", p->name);
 				html_p(ui, NULL, name);
 				html_end(ui);
 
-				html_set_attr(d, HTML_ATTR_CLASS, "player");
-				html_set_attr(d, HTML_ATTR_CLASS, rotclass);
+				html_set_attr(d, html_class, NULL, "player");
+				html_set_attr(d, html_class, NULL, rotclass);
 			}
 
 			html_start_div(ui, "info", 0);
@@ -434,8 +503,8 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_elem_t* p = html_p(ui, NULL, pgn);
 				html_event(ui, p, html_click, a_setmovecursor);
 
-				if (move_iter.i-1 == web->client.move_cursor) {
-					html_set_attr(p, "style", "font-weight:bold;");
+				if (move_iter.i == web->client.move_cursor) {
+					html_set_attr(p, html_attrib, "style", "font-weight:bold;");
 				}
 
 				drop(pgn);
@@ -463,19 +532,20 @@ void render(html_ui_t* ui, chess_web_t* web) {
 					html_elem_t* td = html_start_td(ui);
 
 					int col = p->player%4;
-					static char* bpieces[] = {"img/king.svg","img/queen.svg","img/rook.svg","img/bishop.svg","img/knight.svg","img/pawn.svg", "img/archibishop.svg", "img/chancellor.svg"};
-					static char* wpieces[] = {"img/wking.svg","img/wqueen.svg","img/wrook.svg","img/wbishop.svg","img/wknight.svg","img/wpawn.svg", "img/warchibishop.svg", "img/wchancellor.svg"};
-					static char* rpieces[] = {"img/rking.svg","img/rqueen.svg","img/rrook.svg","img/rbishop.svg","img/rknight.svg","img/rpawn.svg", "img/rarchibishop.svg", "img/rchancellor.svg"};
-					static char* gpieces[] = {"img/gking.svg","img/gqueen.svg","img/grook.svg","img/gbishop.svg","img/gknight.svg","img/gpawn.svg", "img/garchibishop.svg", "img/gchancellor.svg"};
+					static char* bpieces[] = {"img/king.svg","img/queen.svg","img/rook.svg","img/bishop.svg","img/knight.svg","img/pawn.svg", "img/archibishop.svg", "img/chancellor.svg", "img/heir.svg"};
+					static char* wpieces[] = {"img/wking.svg","img/wqueen.svg","img/wrook.svg","img/wbishop.svg","img/wknight.svg","img/wpawn.svg", "img/warchibishop.svg", "img/wchancellor.svg", "img/wheir.svg"};
+					static char* rpieces[] = {"img/rking.svg","img/rqueen.svg","img/rrook.svg","img/rbishop.svg","img/rknight.svg","img/rpawn.svg", "img/rarchibishop.svg", "img/rchancellor.svg", "img/rheir.svg"};
+					static char* gpieces[] = {"img/gking.svg","img/gqueen.svg","img/grook.svg","img/gbishop.svg","img/gknight.svg","img/gpawn.svg", "img/garchibishop.svg", "img/gchancellor.svg", "img/gheir.svg"};
 
+					html_elem_t* img;
 					switch (p->ty) {
 						case p_empty:break;
-						case p_blocked:html_img(ui, NULL, "img/blocked.svg");break;
+						case p_blocked:img=html_img(ui, NULL, "img/blocked.svg");break;
 						default: {
-							if (col==0) html_img(ui, NULL, wpieces[p->ty]);
-							if (col==1) html_img(ui, NULL, bpieces[p->ty]);
-							if (col==2) html_img(ui, NULL, rpieces[p->ty]);
-							if (col==3) html_img(ui, NULL, gpieces[p->ty]);
+							if (col==0) img=html_img(ui, NULL, wpieces[p->ty]);
+							if (col==1) img=html_img(ui, NULL, bpieces[p->ty]);
+							if (col==2) img=html_img(ui, NULL, rpieces[p->ty]);
+							if (col==3) img=html_img(ui, NULL, gpieces[p->ty]);
 						}
 					}
 
@@ -485,18 +555,21 @@ void render(html_ui_t* ui, chess_web_t* web) {
 							case 0: class="white"; break; case 1: class="black"; break; case 2: class="red"; break; case 3: class="green"; break;
 						}
 
-						html_set_attr(td, HTML_ATTR_CLASS, class);
+						html_set_attr(td, html_class, NULL, class);
+						html_set_attr(img, html_draggable, NULL, NULL);
+						html_event(ui, td, html_drag, a_dragmove);
 					}
 
-					html_set_attr(td, HTML_ATTR_CLASS, (bpos[0]+bpos[1])%2 ? "dark" : "light");
+					html_set_attr(td, html_class, NULL, (bpos[0]+bpos[1])%2 ? "dark" : "light");
 
 					if (bpos[0] == web->client.select.from[0] && bpos[1] == web->client.select.from[1]) {
-						html_set_attr(td, HTML_ATTR_CLASS, "selected");
-					} else if (vector_search(&web->client.hints, bpos)!=0) {
-						html_set_attr(td, HTML_ATTR_CLASS, "hint");
+						html_set_attr(td, html_class, NULL, "selected");
+					} else if (vector_search(&web->client.hints, bpos)!=-1) {
+						html_set_attr(td, html_class, NULL, "hint");
 					}
 
 					html_event(ui, td, html_click, a_select);
+					html_event(ui, td, html_drop, a_dropmove);
 
 					html_end(ui);
 				}

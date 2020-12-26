@@ -13,12 +13,16 @@ typedef enum {
 	html_keypress,
 	html_onchange,
 	html_timeout,
+	html_drag,
+	html_drop,
 	html_custom
 } html_event_ty;
 typedef struct {
 	html_event_ty ty;
 	struct html_ui* ui;
 	unsigned action;
+
+	char* dropdata;
 
 	union {
 		struct html_elem* elem;
@@ -30,6 +34,12 @@ typedef enum {
 	html_list = 2,
 	html_list_child = 4
 } html_elem_flags_t;
+typedef enum {
+	html_class,
+	html_value,
+	html_draggable,
+	html_attrib
+} html_attr_ty_t;
 typedef struct html_elem {
 	html_elem_flags_t flags;
 	union {
@@ -70,10 +80,10 @@ typedef struct html_ui {
 html_ui_t html_ui_new();
 void html_send(html_ui_t* ui, unsigned action, void* data);
 void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data);
+void html_playsound(html_ui_t* ui, char* sound, double vol);
 void html_event(html_ui_t* ui, html_elem_t* elem, html_event_ty ty, unsigned action);
 void html_end(html_ui_t* ui);
-extern char* HTML_ATTR_CLASS;
-void html_set_attr(html_elem_t* elem, char* name, char* val);
+void html_set_attr(html_elem_t* elem, html_attr_ty_t ty, char* name, char* val);
 html_elem_t* html_start_div(html_ui_t* ui, char* id, int list);
 html_elem_t* html_start_select(html_ui_t* ui, char* id);
 html_elem_t* html_start_table(html_ui_t* ui, char* id);
