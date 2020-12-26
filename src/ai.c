@@ -107,7 +107,7 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t*
 	vector_iterator player_iter = vector_iterate(&g->players);
 	while (vector_next(&player_iter)) {
 		if (player_iter.i==b->player) {
-			if (vecs->checks[player_iter.i]!=0) {
+			if (vecs->checks[player_iter.i]) {
 				b->checks[player_iter.i] = 1;
 				vecs->checks[player_iter.i] = 0;
 			}
@@ -237,10 +237,14 @@ void ai_make_move(game_t* g) {
 		for (char i=0; i<AI_MAXDEPTH; i++) {
 			memset(g_move_vecs.branches[i].checks, 0, AI_MAXPLAYER);
 		}
-
-		memset(g_move_vecs.checks, 0, AI_MAXPLAYER);
+		
 		g_move_vecs.moves = vector_new(sizeof(piece_moves_t));
 		g_move_vecs.init=1;
+	}
+
+	vector_iterator p_iter = vector_iterate(&g->players);
+	while (vector_next(&p_iter)) {
+		g_move_vecs.checks[p_iter.i] = (char)player_check(g, p_iter.i, p_iter.x);
 	}
 
 	g_move_vecs.ai_player = g->player;

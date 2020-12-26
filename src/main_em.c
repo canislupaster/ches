@@ -329,6 +329,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 	switch (web->client.mode) {
 		case mode_menu: switch (web->menustate) {
 			case menu_main: {
+				html_h(ui, 1, "title", "esochess");
 				html_p(ui, "p1", "welcome to chess. images by wikimedians Cburnett and spinningspark.");
 				html_p(ui, "p2", " also epilepsy warning, some sequences may flash; now consider the following modes:");
 
@@ -338,6 +339,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_event(ui, s, html_click, a_singleplayer);
 				html_elem_t* m = html_button(ui, "multi", "multiplayer");
 				html_event(ui, m, html_click, a_multiplayer);
+				html_a(ui, "git", "github", "https://github.com/super-cilious/termchess");
 
 				html_end(ui);
 				break;

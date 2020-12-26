@@ -452,6 +452,11 @@ html_elem_t* html_img(html_ui_t* ui, char* id, char* src) {
 	return e;
 }
 
+html_elem_t* html_h(html_ui_t* ui, int l, char* id, char* text) {
+	char* hdrs[6] = {"h1", "h2", "h3", "h4", "h5", "h6"};
+	return html_elem_new(ui, hdrs[l], id, text);
+}
+
 html_elem_t* html_p(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "p", id, text);
 }
@@ -466,6 +471,12 @@ html_elem_t* html_label(html_ui_t* ui, char* id, char* text) {
 
 html_elem_t* html_button(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "button", id, text);
+}
+
+html_elem_t* html_a(html_ui_t* ui, char* id, char* text, char* href) {
+	html_elem_t* a = html_elem_new(ui, "a", id, text);
+	html_set_attr(a, html_attrib, "href", href);
+	return a;
 }
 
 html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
