@@ -1,1 +1,1 @@
-"twovone.board", "0 White\n0 Black\n2 Gray\n\nAlliance\nWhite\nBlack\n\n2R 2N 2B 2Q 2H 2Q 2K 2B 2N 2R\n2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv\n\n\n\n\n0P^0P^0P^0P^0P^1P^1P^1P^1P^1P^\n0R 0N 0B 0Q 0K 1Q 1K 1B 1N 1R\n"
+"twovone.board", "0 White\n0 Black\n2 Gray\n\nAlliance\nWhite\nBlack\n\n2R 2N 2B 2Q 2H 2Q 2K 2B 2N 2R\n2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv2Pv\n\n\n\n\n1P^1P^1P^1P^1P^0P^0P^0P^0P^0P^\n1R 1N 1B 1Q 1K 0Q 0K 0B 0N 0R\n"

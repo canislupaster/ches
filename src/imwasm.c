@@ -64,6 +64,7 @@ typedef struct html_elem {
 
 	struct html_elem* parent;
 	vector_t children;
+	unsigned used_children;
 
 	vector_t attribs;
 	vector_t new_attribs;
@@ -82,7 +83,7 @@ typedef struct html_ui {
 	int cur_i;
 	html_elem_t* cur[HTML_STACK_SZ]; //new elements added as children
 
-	unsigned elem_i_cur[HTML_STACK_SZ+1];
+	unsigned body_i;
 
 	map_t elem_id;
 
@@ -312,7 +313,7 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 	html_elem_t* parent = ui->cur[ui->cur_i];
 	int list = id==NULL;
 
-	unsigned i = ui->elem_i_cur[parent ? ui->cur_i+1 : 0]++;
+	unsigned i = parent ? parent->used_children++ : ui->body_i++;
 
 	if (list) {
 		eref = vector_setget(&parent->children, i, &exists);
@@ -391,6 +392,7 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 	}
 
 	elem->innertext = txt ? heapcpystr(txt) : NULL;
+	elem->used_children = 0;
 	elem->flags |= html_used;
 
 	return elem;
@@ -399,7 +401,6 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 void html_start(html_ui_t* ui, html_elem_t* elem, int list) {
 	unsigned i = ui->cur[ui->cur_i] == NULL ? ui->cur_i : ++ui->cur_i;
 	ui->cur[i] = elem;
-	ui->elem_i_cur[i+1] = 0;
 
 	if (list) elem->flags |= html_list;
 }
@@ -416,8 +417,12 @@ void html_set_attr(html_elem_t* elem, html_attr_ty_t ty, char* name, char* val) 
 	}
 }
 
+html_elem_t* html_div(html_ui_t* ui, char* id) {
+	return html_elem_new(ui, "div", id, NULL);
+}
+
 html_elem_t* html_start_div(html_ui_t* ui, char* id, int list) {
-	html_elem_t* e = html_elem_new(ui, "div", id, NULL);
+	html_elem_t* e = html_div(ui, id);
 	html_start(ui, e, list);
 	return e;
 }
@@ -650,7 +655,7 @@ void html_render(html_ui_t* ui) {
 	}
 
 	for (html_elem_t** e = ui->cur; *e != NULL; e++) *e = NULL;
-	ui->elem_i_cur[0] = 0;
+	ui->body_i = 0;
 
 	cindex_cycle(&ui->cin);
 }

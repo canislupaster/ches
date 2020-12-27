@@ -7,7 +7,7 @@
 
 #include "imwasm.h"
 
-#define NUM_BOARDS 4
+#define NUM_BOARDS 5
 char* boards[NUM_BOARDS*2] = {
 #include "../include/default.board"
 		,
@@ -16,6 +16,8 @@ char* boards[NUM_BOARDS*2] = {
 #include "../include/twovone.board"
 		,
 #include "../include/capablanca.board"
+		,
+#include "../include/heirchess.board"
 };
 
 #define DEFAULT_SERVADDR "167.172.222.101"
@@ -469,6 +471,14 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			}
 
 			html_start_div(ui, "wrapper", 1);
+
+			html_elem_t* rot_divs[4] = {html_div(ui, NULL), html_div(ui, NULL), html_div(ui, NULL), html_div(ui, NULL)};
+			for (char i=0; i<4; i++) html_set_attr(rot_divs[i], html_class, NULL, "player");
+			html_set_attr(rot_divs[0], html_class, NULL, "bottom");
+			html_set_attr(rot_divs[1], html_class, NULL, "right");
+			html_set_attr(rot_divs[2], html_class, NULL, "up");
+			html_set_attr(rot_divs[3], html_class, NULL, "left");
+
 			vector_iterator t_iter = vector_iterate(&web->client.g.players);
 			while (vector_next(&t_iter)) {
 				player_t* p = t_iter.x;
@@ -478,23 +488,14 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				if (rel_rot<0) rel_rot=4+rel_rot;
 				rel_rot %= 4;
 
-				char* rotclass;
-				switch (rel_rot) {
-					case 0: rotclass="bottom"; break;
-					case 1: rotclass="right"; break;
-					case 2: rotclass="up"; break;
-					case 3: rotclass="left"; break;
-				}
+				html_start(ui, rot_divs[rel_rot], 1);
 
-				html_elem_t* d = html_start_div(ui, NULL, 1);
 				char* name = p->name;
 				if (web->client.g.player==t_iter.i)
 					name = heapstr(web->client.g.won ? "👑 %s" : "%s's turn", p->name);
 				html_p(ui, NULL, name);
-				html_end(ui);
 
-				html_set_attr(d, html_class, NULL, "player");
-				html_set_attr(d, html_class, NULL, rotclass);
+				html_end(ui);
 			}
 
 			html_start_div(ui, "info", 0);

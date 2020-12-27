@@ -161,10 +161,8 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
 	}
 
 	for (char i=0; i<g->players.length; i++) {
-		if (b->checks[i]) {
-			vecs->checks[i] = (char)!vecs->checks[i];
-			b->checks[i] = 0;
-		}
+		vecs->checks[i] ^= b->checks[i];
+		b->checks[i] = 0;
 	}
 
 	g->player=b->player;

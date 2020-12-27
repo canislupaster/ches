@@ -526,11 +526,11 @@ void next_player(game_t* g) {
 void update_checks_mates(game_t* g) {
 	vector_iterator t_iter = vector_iterate(&g->players);
 	while (vector_next(&t_iter)) {
-		player_t* t2 = t_iter.x;
+		player_t* t = t_iter.x;
 
-		if (player_check(g, (char)(t_iter.i), t2)) {
-			t2->check=1;
-			t2->mate=1;
+		if (!t->mate && player_check(g, (char)(t_iter.i), t)) {
+			t->check=1;
+			t->mate=1;
 
 			vector_t moves = vector_new(sizeof(int[2]));
 			vector_iterator board_iter = vector_iterate(&g->board);
@@ -539,7 +539,7 @@ void update_checks_mates(game_t* g) {
 				if (piece_owned(p, t_iter.i)) {
 					piece_moves(g, p, &moves);
 					if (moves.length>0) {
-						t2->mate=0;
+						t->mate=0;
 						break;
 					}
 				}
@@ -547,7 +547,7 @@ void update_checks_mates(game_t* g) {
 
 			vector_free(&moves);
 		} else {
-			t2->check=0;
+			t->check=0;
 		}
 	}
 }
