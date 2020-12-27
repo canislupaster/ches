@@ -456,7 +456,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 					char* name = *(char**)spec_iter.x;
 					if (*name==0) html_span(ui, NULL, "anon");
 					else html_span(ui, NULL, name);
-					if (spec_iter.i!=web->client.g.m.spectators.length) {
+					if (spec_iter.i!=web->client.g.m.spectators.length-1) {
 						html_span(ui, NULL, ", ");
 					}
 				}

@@ -434,7 +434,7 @@ void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
 
 	player_t* t = vector_get(&client->g.players, client->player);
 	t->joined = 1;
-	if (name) t->name = name;
+	if (name) t->name = heapcpystr(name);
 
 	vector_t data = vector_new(1);
 
