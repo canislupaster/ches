@@ -231,7 +231,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, int exchan
 	return gain;
 }
 
-void ai_make_move(game_t* g) {
+void ai_make_move(game_t* g, move_t* out_m) {
 	if (!g_move_vecs.init) {
 		for (char i=0; i<AI_MAXDEPTH; i++) {
 			memset(g_move_vecs.branches[i].checks, 0, AI_MAXPLAYER);
@@ -274,4 +274,5 @@ void ai_make_move(game_t* g) {
 	printf("%i\n", g_move_vecs.checks[1]);
 
 	make_move(g, &g_move_vecs.out_m, 0, 1, g->player);
+	if (out_m) *out_m = g_move_vecs.out_m;
 }

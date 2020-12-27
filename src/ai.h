@@ -6,4 +6,4 @@
 #include <math.h>
 #include "util.h"
 #include "chess.h"
-void ai_make_move(game_t* g);
+void ai_make_move(game_t* g, move_t* out_m);

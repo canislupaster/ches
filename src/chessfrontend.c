@@ -50,9 +50,10 @@ void write_players(vector_t* data, game_t* g) {
 	while (vector_next(&p_iter)) {
 		player_t* p = p_iter.x;
 		write_int(data, p->board_rot);
-		write_int(data, p->check);
-		write_int(data, p->mate);
-		write_int(data, p->joined);
+		vector_pushcpy(data, &p->check);
+		vector_pushcpy(data, &p->ai);
+		vector_pushcpy(data, &p->mate);
+		vector_pushcpy(data, &p->joined);
 		write_str(data, p->name);
 
 		vector_pushcpy(data, &(char){(char)p->allies.length});
@@ -68,13 +69,15 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 	if (num_players==0) cur->err=1;
 	g->last_player = read_chr(cur);
 	g->player = read_chr(cur);
+
 	for (char i=0; i<num_players; i++) {
 		player_t* p = vector_push(&g->players);
 		p->board_rot = read_int(cur);
-		p->check = read_int(cur);
-		p->mate = read_int(cur);
-		p->joined = read_int(cur);
-		if (joined && p->joined) *joined = i;
+		p->check = read_chr(cur);
+		p->ai = read_chr(cur);
+		p->mate = read_chr(cur);
+		p->joined = read_chr(cur);
+		if (joined && !p->ai && p->joined) *joined = i;
 		p->name = read_str(cur);
 
 		p->allies = vector_new(1);
@@ -257,7 +260,7 @@ void chess_client_ai(chess_client_t* client) {
 		player_t* p = vector_get(&client->g.players, client->g.player);
 		if (!p->ai) break;
 
-		ai_make_move(&client->g);
+		ai_make_move(&client->g, NULL);
 	}
 
 	client->move_cursor = client->g.moves.length;
@@ -267,14 +270,6 @@ void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make
 	client->mode = mode;
 
 	if (make) {
-		if (mode==mode_singleplayer) {
-			vector_iterator p_iter = vector_iterate(&client->g.players);
-			while (vector_next(&p_iter)) {
-				player_t* p = p_iter.x;
-				if (p_iter.i!=client->player) p->ai=1;
-			}
-		}
-
 		chess_client_ai(client);
 
 		client->spectating = 0;
@@ -396,6 +391,8 @@ int client_make_move(chess_client_t* client) {
 		if (client->mode==mode_singleplayer) {
 			chess_client_ai(client);
 			refresh_hints(client);
+
+			client->player = client->g.player;
 		} else if (client->mode==mode_multiplayer) {
 			client->move_cursor++;
 

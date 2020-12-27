@@ -101,7 +101,9 @@ html_ui_t html_ui_new() {
 
 	memset(ui.cur, 0, sizeof(html_elem_t*) * HTML_STACK_SZ);
 
-	MAIN_THREAD_EM_ASM(list_elem=[];); //init globals
+	MAIN_THREAD_EM_ASM(list_elem=[]; tocstr=(v)=>{
+		let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;
+	};); //init globals
 	return ui;
 }
 
@@ -172,13 +174,7 @@ void html_register_ev(html_elem_t* elem, html_event_t* ev, int rem) {
 
 			elem.addEventListener("drop", (ev) => {
 				ev.preventDefault();
-
-				let v = ev.dataTransfer.getData("text/plain");
-				let len = lengthBytesUTF8(v)+1;
-				let buf = _malloc(len);
-				stringToUTF8(v, buf, len);
-
-				_html_cb($0, buf);
+				_html_cb($0, tocstr(ev.dataTransfer.getData("text/plain")));
 			});
 		}, ev);
 	}
@@ -314,6 +310,7 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 	int list = id==NULL;
 
 	unsigned i = parent ? parent->used_children++ : ui->body_i++;
+	printf("%s, %u\n", id, i);
 
 	if (list) {
 		eref = vector_setget(&parent->children, i, &exists);
@@ -346,14 +343,16 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 		if (list) {
 			elem->list_i = cindex_get(&ui->cin);
 			EM_ASM(list_elem[$0]=elem;, elem->list_i);
-		} else if (elem->parent != parent || elem->i != i) {
-			MAIN_THREAD_EM_ASM((($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)), parent->id);
+		} else {
+			MAIN_THREAD_EM_ASM((($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)), parent ? parent->id : NULL);
 
-			html_elem_detach(elem);
-			elem->parent = parent;
-			elem->i = i;
+			if (elem->parent != parent || elem->i != i) {
+				html_elem_detach(elem);
+				elem->parent = parent;
+				elem->i = i;
 
-			if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
+				if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
+			}
 		}
 
 		if (txt==NULL) {
@@ -488,15 +487,26 @@ html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "option", id, text);
 }
 
+html_elem_t* html_radio(html_ui_t* ui, char* id, char* name, char* val, int checked) {
+	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
+	html_set_attr(e, html_attrib, "type", "radio");
+	if (name) html_set_attr(e, html_attrib, "name", name);
+	if (val) html_set_attr(e, html_value, NULL, val);
+	if (checked) html_set_attr(e, html_attrib, "checked", NULL);
+	return e;
+}
+
 html_elem_t* html_input(html_ui_t* ui, char* id, char* val) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
 	if (val) html_set_attr(e, html_value, NULL, val);
 	return e;
 }
 
-html_elem_t* html_checkbox(html_ui_t* ui, char* id, int checked) {
+html_elem_t* html_checkbox(html_ui_t* ui, char* id, char* name, char* val, int checked) {
 	html_elem_t* e = html_elem_new(ui, "input", id, NULL);
 	html_set_attr(e, html_attrib, "type", "checkbox");
+	if (name) html_set_attr(e, html_attrib, "name", name);
+	if (val) html_set_attr(e, html_value, NULL, val);
 	if (checked) html_set_attr(e, html_attrib, "checked", NULL);
 	return e;
 }
@@ -510,12 +520,39 @@ html_elem_t* html_textarea(html_ui_t* ui, char* id, char* val) {
 char* html_input_value(char* id) {
 	html_select_id(id);
 	return (char*)MAIN_THREAD_EM_ASM_INT({
-																				 let v = elem.value;
-																				 let len = lengthBytesUTF8(v)+1;
-																				 let buf = _malloc(len);
-																				 stringToUTF8(v, buf, len);
-																				 return buf;
-																			 });
+		return tocstr(elem.value);
+	});
+}
+
+char* html_radio_value(char* name) {
+	return (char*)MAIN_THREAD_EM_ASM_INT({
+		for (x of document.getElementsByName(UTF8ToString($0))) {
+			if (x.checked) return tocstr(x.value);
+		}
+
+		return 0;
+	}, name);
+}
+
+vector_t html_checkboxes_checked(char* name) {
+	vector_t checked = vector_new(sizeof(char*));
+	MAIN_THREAD_EM_ASM(elems = Array.prototype.slice.call(document.getElementsByName(UTF8ToString($0)));, name);
+
+	while (1) {
+		char* v = (char*)MAIN_THREAD_EM_ASM_INT({
+			while (elems.length>0) {
+				elem = elems.shift();
+				if (elem.checked) return tocstr(elem.value);
+			}
+
+			return 0;
+		}, name);
+
+		if (!v) break;
+		else vector_pushcpy(&checked, v);
+	}
+
+	return checked;
 }
 
 int html_checked(char* id) {
@@ -646,6 +683,8 @@ int html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 }
 
 void html_render(html_ui_t* ui) {
+	ui->body_i = 0;
+
 	ui->render(ui, ui->arg);
 
 	map_iterator iter = map_iterate(&ui->elem_id);
@@ -655,7 +694,6 @@ void html_render(html_ui_t* ui) {
 	}
 
 	for (html_elem_t** e = ui->cur; *e != NULL; e++) *e = NULL;
-	ui->body_i = 0;
 
 	cindex_cycle(&ui->cin);
 }

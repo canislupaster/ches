@@ -1,6 +1,7 @@
 #include "chess.h"
 #include "chessfrontend.h"
 #include "network.h"
+#include "ai.h"
 
 typedef struct {
 	server_t server;
@@ -210,10 +211,18 @@ int main(int argc, char** argv) {
 				if (!game_in(&cserv, i, &mg, &player) || cur.err) break;
 				if (make_move(&mg->g, &m, 1, 1, (char)player) != move_success) break;
 
-				vector_pushcpy(&resp, &(char){mp_move_made});
-				write_move(&resp, &m);
-				broadcast(&cserv, &mg->player_num, &resp, i);
-				vector_clear(&resp);
+				while (1) {
+					vector_pushcpy(&resp, &(char){mp_move_made});
+					write_move(&resp, &m);
+					broadcast(&cserv, &mg->player_num, &resp, i);
+					vector_clear(&resp);
+
+					player_t* p = vector_get(&mg->g.players, mg->g.player);
+					if (mg->g.won || !p->ai) break;
+
+					ai_make_move(&mg->g, &m);
+					i=0;
+				}
 
 				break;
 			}

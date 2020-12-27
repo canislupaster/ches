@@ -240,15 +240,38 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			break;
 		}
 		case a_makegame: {
-			char* p_i = html_input_value("players");
-			int p = atoi(p_i);
+			char* p_i = html_radio_value("chosenplayer");
+			char p = (char)atoi(p_i);
+			drop(p_i);
+
 			web->client.player = (char)p;
+
+			vector_t ais = html_checkboxes_checked("isai");
+			vector_iterator ai_iter = vector_iterate(&ais);
+
+			char ai_i=-1;
+			while (vector_next(&ai_iter)) {
+				ai_i = (char)atoi(ai_iter.x);
+				printf("%i", ai_i);
+				if (ai_i==web->client.player) break; //passthrough
+
+				player_t* ai = vector_get(&web->client.g.players, ai_i);
+				ai->ai=1;
+				ai->joined=1;
+			}
+
+			if (ai_i==web->client.player) {
+				vector_free_strings(&ais);
+				web->err = "you arent an ai, fool";
+				break;
+			}
 
 			chess_client_initgame(&web->client, web->menu_multiplayer?mode_multiplayer:mode_singleplayer, 1);
 			if (web->menu_multiplayer) {
 				chess_client_makegame(&web->client, web->gname, web->mp_name);
 				drop(web->gname);
 			}
+
 			setup_game(web);
 			break;
 		}
@@ -395,7 +418,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 
 				html_start_div(ui, "opts", 0);
 				html_label(ui, "pawnpromo-label", "pawn promotion permitted?");
-				html_checkbox(ui, "pawnpromotion", 1);
+				html_checkbox(ui, "pawnpromotion", NULL, NULL, 1);
 				html_end(ui);
 
 				html_elem_t* e = html_button(ui, "next", "next");
@@ -405,15 +428,44 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			case menu_chooseplayer: {
 				html_p(ui, "choose", "now devise your character:");
 
-				html_start_select(ui, "players");
+				html_start_table(ui, "players");
+				html_start_tr(ui);
+
+				html_start_td(ui);
+				html_p(ui, NULL, "ai");
+				html_end(ui);
+
+				html_start_td(ui);
+				html_p(ui, NULL, "you");
+				html_end(ui);
+
+				html_start_td(ui);
+				html_p(ui, NULL, "player name");
+				html_end(ui);
+
+				html_end(ui);
+
 				vector_iterator p_iter = vector_iterate(&web->client.g.players);
 				while (vector_next(&p_iter)) {
 					player_t* p = p_iter.x;
 
-					html_elem_t* e = html_option(ui, NULL, p->name);
+					html_start_tr(ui);
 					char* istr = heapstr("%i", p_iter.i);
-					html_set_attr(e, html_attrib, "value", istr);
+
+					html_start_td(ui);
+					html_checkbox(ui, NULL, "isai", istr, p_iter.i!=0);
+					html_end(ui);
+
+					html_start_td(ui);
+					html_radio(ui, NULL, "chosenplayer", istr, p_iter.i==0);
+					html_end(ui);
+
+					html_start_td(ui);
+					html_p(ui, NULL, p->name);
+					html_end(ui);
+
 					drop(istr);
+					html_end(ui);
 				}
 
 				html_end(ui);

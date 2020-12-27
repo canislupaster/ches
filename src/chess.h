@@ -37,12 +37,12 @@ typedef struct __attribute__ ((__packed__)) {
 } move_t;
 typedef struct {
 	int board_rot;
-	int check, mate;
-	int ai;
+	char check, mate;
+	char ai;
 
 	int king;
 	char* name;
-	int joined;
+	char joined;
 
 	vector_t allies;
 } player_t;

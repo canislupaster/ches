@@ -51,6 +51,7 @@ typedef struct html_elem {
 
 	struct html_elem* parent;
 	vector_t children;
+	unsigned used_children;
 
 	vector_t attribs;
 	vector_t new_attribs;
@@ -66,7 +67,7 @@ typedef struct html_ui {
 	int cur_i;
 	html_elem_t* cur[HTML_STACK_SZ]; //new elements added as children
 
-	unsigned elem_i_cur[HTML_STACK_SZ+1];
+	unsigned body_i;
 
 	map_t elem_id;
 
@@ -99,10 +100,13 @@ html_elem_t* html_label(html_ui_t* ui, char* id, char* text);
 html_elem_t* html_button(html_ui_t* ui, char* id, char* text);
 html_elem_t* html_a(html_ui_t* ui, char* id, char* text, char* href);
 html_elem_t* html_option(html_ui_t* ui, char* id, char* text);
+html_elem_t* html_radio(html_ui_t* ui, char* id, char* name, char* val, int checked);
 html_elem_t* html_input(html_ui_t* ui, char* id, char* val);
-html_elem_t* html_checkbox(html_ui_t* ui, char* id, int checked);
+html_elem_t* html_checkbox(html_ui_t* ui, char* id, char* name, char* val, int checked);
 html_elem_t* html_textarea(html_ui_t* ui, char* id, char* val);
 char* html_input_value(char* id);
+char* html_radio_value(char* name);
+vector_t html_checkboxes_checked(char* name);
 int html_checked(char* id);
 char* html_local_get(char* name);
 void html_local_set(char* name, char* val);
