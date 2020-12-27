@@ -135,6 +135,7 @@ int main(int argc, char** argv) {
 
 				map_insertcpy(&cserv.num_joined, &i, &mg);
 
+				vector_populate(&mg->player_num, mg->g.players.length, &(unsigned*){0});
 				vector_setcpy(&mg->player_num, (unsigned)joined, &i);
 
 				vector_pushcpy(&cserv.games, &mg);
