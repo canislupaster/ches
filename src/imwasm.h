@@ -51,7 +51,9 @@ typedef struct html_elem {
 
 	struct html_elem* parent;
 	vector_t children;
-	unsigned used_children;
+
+	unsigned used_children; //used for elem.i
+	char children_mod; //new element created; all new elements must be reinserted
 
 	vector_t attribs;
 	vector_t new_attribs;
@@ -67,7 +69,9 @@ typedef struct html_ui {
 	int cur_i;
 	html_elem_t* cur[HTML_STACK_SZ]; //new elements added as children
 
+	//same function as in elem
 	unsigned body_i;
+	char body_mod;
 
 	map_t elem_id;
 

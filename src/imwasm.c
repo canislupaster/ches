@@ -343,17 +343,20 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 		}
 
 		html_select(elem);
+
 		if (list) {
 			elem->list_i = cindex_get(&ui->cin);
 			EM_ASM(list_elem[$0]=elem;, elem->list_i);
-		} else if (elem->parent != parent || (parent ? parent->children_mod : ui->body_mod) || elem->i != i) {
+		} else if (elem->parent!=parent || (parent ? parent->children_mod : ui->body_mod) || elem->i!=i) {
 			MAIN_THREAD_EM_ASM((($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)), parent ? parent->id : NULL);
 
-			html_elem_detach(elem);
-			elem->parent = parent;
-			elem->i = i;
+			if (elem->parent!=parent || elem->i!=i) {
+				html_elem_detach(elem);
+				elem->parent = parent;
+				elem->i = i;
 
-			if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
+				if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
+			}
 		}
 
 		if (txt==NULL) {
@@ -378,10 +381,10 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 
 		elem->parent = parent;
 		elem->i = i;
-		if (elem->parent && !list) {
-			vector_pushcpy(&elem->parent->children, &elem);
+		if (elem->parent) {
+			if (!list) vector_pushcpy(&elem->parent->children, &elem);
 			elem->parent->children_mod = 1;
-		} else if (!list) {
+		} else {
 			ui->body_mod = 1;
 		}
 
