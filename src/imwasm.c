@@ -310,7 +310,6 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 	int list = id==NULL;
 
 	unsigned i = parent ? parent->used_children++ : ui->body_i++;
-	printf("%s, %u\n", id, i);
 
 	if (list) {
 		eref = vector_setget(&parent->children, i, &exists);
