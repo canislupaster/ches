@@ -64,7 +64,9 @@ typedef struct html_elem {
 
 	struct html_elem* parent;
 	vector_t children;
-	unsigned used_children;
+
+	unsigned used_children; //used for elem.i
+	char children_mod; //new element created; all new elements must be reinserted
 
 	vector_t attribs;
 	vector_t new_attribs;
@@ -83,7 +85,9 @@ typedef struct html_ui {
 	int cur_i;
 	html_elem_t* cur[HTML_STACK_SZ]; //new elements added as children
 
+	//same function as in elem
 	unsigned body_i;
+	char body_mod;
 
 	map_t elem_id;
 
@@ -342,16 +346,14 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 		if (list) {
 			elem->list_i = cindex_get(&ui->cin);
 			EM_ASM(list_elem[$0]=elem;, elem->list_i);
-		} else {
+		} else if (elem->parent != parent || (parent ? parent->children_mod : ui->body_mod) || elem->i != i) {
 			MAIN_THREAD_EM_ASM((($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)), parent ? parent->id : NULL);
 
-			if (elem->parent != parent || elem->i != i) {
-				html_elem_detach(elem);
-				elem->parent = parent;
-				elem->i = i;
+			html_elem_detach(elem);
+			elem->parent = parent;
+			elem->i = i;
 
-				if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
-			}
+			if (elem->parent) vector_pushcpy(&elem->parent->children, &elem);
 		}
 
 		if (txt==NULL) {
@@ -376,7 +378,12 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 
 		elem->parent = parent;
 		elem->i = i;
-		if (elem->parent && !list) vector_pushcpy(&elem->parent->children, &elem);
+		if (elem->parent && !list) {
+			vector_pushcpy(&elem->parent->children, &elem);
+			elem->parent->children_mod = 1;
+		} else if (!list) {
+			ui->body_mod = 1;
+		}
 
 		elem->children = vector_new(sizeof(html_elem_t*));
 
@@ -391,6 +398,7 @@ html_elem_t* html_elem_new(html_ui_t* ui, char* tag, char* id, char* txt) {
 
 	elem->innertext = txt ? heapcpystr(txt) : NULL;
 	elem->used_children = 0;
+	elem->children_mod = 0;
 	elem->flags |= html_used;
 
 	return elem;
@@ -683,6 +691,7 @@ int html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 
 void html_render(html_ui_t* ui) {
 	ui->body_i = 0;
+	ui->body_mod = 0;
 
 	ui->render(ui, ui->arg);
 

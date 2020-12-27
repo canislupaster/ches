@@ -131,7 +131,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 				case mode_menu: switch (web->menustate) { //triple-switch
 					case menu_makegame: {
 						if (web->menu_multiplayer) web->client.mode = mode_gamelist;
-						else web->client.mode = menu_main;
+						else web->menustate = menu_main;
 						break;
 					}
 					case menu_chooseplayer: {
@@ -252,7 +252,6 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			char ai_i=-1;
 			while (vector_next(&ai_iter)) {
 				ai_i = (char)atoi(ai_iter.x);
-				printf("%i", ai_i);
 				if (ai_i==web->client.player) break; //passthrough
 
 				player_t* ai = vector_get(&web->client.g.players, ai_i);

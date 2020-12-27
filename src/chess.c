@@ -673,9 +673,9 @@ game_t parse_board(char* str) {
 				vector_pushcpy(&g.board, &(piece_t){.ty=p_empty});
 
 			if (row_wid>g.board_w) {
-				for (int y=g.board_h; y>0; y--) {
-					vector_insertcpy(&g.board, g.board_w*y, &(piece_t){.ty=p_empty});
-				}
+				for (int y=g.board_h; y>0; y--)
+					for (int x=g.board_w; x<row_wid; x++)
+						vector_insertcpy(&g.board, g.board_w*y, &(piece_t){.ty=p_empty});
 
 				g.board_w=row_wid;
 			}
