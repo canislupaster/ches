@@ -25,7 +25,7 @@ float piecety_value(piece_ty ty) {
 
 #define AI_DEPTH 2 //base search
 #define AI_MAXDEPTH 5 //absolute maximum depth, including with extensions
-#define AI_EXPECTEDLEN 45 //more than this number of moves, otherwise extend by log2(expected/len)
+#define AI_EXPECTEDLEN 70 //more than this number of moves, otherwise extend by log2(expected/len)
 #define AI_MAXPLAYER 127
 
 char finddepth(unsigned len) {
@@ -58,7 +58,7 @@ typedef struct {
 typedef struct {
 	piece_t* p;
 	int pos[2];
-	vector_t moves;
+	vector_cap_t moves;
 	char modified[AI_MAXDEPTH];
 } piece_moves_t;
 
@@ -84,7 +84,7 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 	while (vector_next(&p_search)) {
 		piece_moves_t* pmoves = p_search.x;
 		if (pmoves->p==p) {
-			range = (float)pmoves->moves.length;
+			range = (float)pmoves->moves.vec.length;
 			break;
 		}
 	}
@@ -134,8 +134,8 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, move_t* m) {
 		//when having >2 players, update moves if check is still ongoing
 		if (b->checks[pmoves->p->player] || vecs->checks[pmoves->p->player]
 				|| pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, b->m)) {
-			vector_clear(&pmoves->moves);
-			piece_moves(g, pmoves->p, &pmoves->moves);
+			vector_clear(&pmoves->moves.vec);
+			piece_moves(g, pmoves->p, &pmoves->moves.vec);
 			pmoves->modified[depth] = 1;
 		}
 	}
@@ -158,8 +158,8 @@ void branch_exit(game_t* g, move_vecs_t* vecs, char depth) {
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
 		if (pmoves->p==from || pmoves->modified[depth]) {
-			vector_clear(&pmoves->moves);
-			piece_moves(g, pmoves->p, &pmoves->moves);
+			vector_clear(&pmoves->moves.vec);
+			piece_moves(g, pmoves->p, &pmoves->moves.vec);
 			pmoves->modified[depth] = 0;
 		}
 	}
@@ -189,7 +189,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, int exchan
 
 		m.from[0]=pmoves->pos[0]; m.from[1]=pmoves->pos[1];
 
-		vector_iterator move_iter = vector_iterate(&pmoves->moves);
+		vector_iterator move_iter = vector_iterate(&pmoves->moves.vec);
 		while (vector_next(&move_iter)) {
 			int* pos = move_iter.x;
 			piece_t* target = board_get(g, pos);
@@ -257,7 +257,7 @@ void ai_make_move(game_t* g, move_t* out_m) {
 	vector_iterator pm_iter = vector_iterate(&g_move_vecs.moves);
 	while (vector_next(&pm_iter)) {
 		piece_moves_t* pmoves = pm_iter.x;
-		vector_free(&pmoves->moves);
+		vector_free(&pmoves->moves.vec);
 	}
 
 	vector_clear(&g_move_vecs.moves);
@@ -267,10 +267,10 @@ void ai_make_move(game_t* g, move_t* out_m) {
 		piece_t* p = board_get(g, pos);
 		piece_moves_t pmoves = {.p=p, .pos={pos[0], pos[1]}};
 		memset(pmoves.modified, 0, AI_MAXDEPTH);
-		pmoves.moves = vector_new(sizeof(int[2]));
-		piece_moves(g, p, &pmoves.moves);
+		pmoves.moves = vector_alloc(vector_new(sizeof(int[2])), 0);
+		piece_moves(g, p, &pmoves.moves.vec);
 
-		len += pmoves.moves.length;
+		len += pmoves.moves.vec.length;
 
 		vector_pushcpy(&g_move_vecs.moves, &pmoves);
 	}

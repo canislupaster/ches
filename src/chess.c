@@ -645,7 +645,6 @@ game_t parse_board(char* str) {
 				}
 			}
 
-			printf("%i - %i\n", p_i[0], p_i[1]);
 			vector_pushcpy(&((player_t*)vector_get(&g.players, p_i[0]))->allies, &p_i[1]);
 			vector_pushcpy(&((player_t*)vector_get(&g.players, p_i[1]))->allies, &p_i[0]);
 			str++; continue;

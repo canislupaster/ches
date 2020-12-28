@@ -135,7 +135,13 @@ void read_board(cur_t* cur, game_t* g) {
 		p->player = read_chr(cur);
 
 		if (p->ty == p_king) {
-			((player_t*)vector_get(&g->players, p->player))->king = board_i(g, p);
+			player_t* pp = vector_get(&g->players, p->player);
+			if (!pp) {
+				cur->err=1;
+				return;
+			}
+
+			pp->king = board_i(g, p);
 		}
 	}
 }

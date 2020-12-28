@@ -248,6 +248,7 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 			char hup=0;
 			if (poll_iter.i==0) {
 				int new = accept(pfd->fd, NULL, NULL);
+				setsockopt(new, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int));
 				vector_pushcpy(&serv->conns, &(struct pollfd){.fd=new, .events=POLLIN});
 				vector_pushcpy(&serv->nums, &serv->num);
 				if (serv->upgrade) vector_pushcpy(&serv->conn_upgrade, &(char){0});
