@@ -93,7 +93,9 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 	return range*AI_RANGEVAL + piecety_value(p->ty);
 }
 
-void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t* m) {
+void branch_enter(game_t* g, move_vecs_t* vecs, char depth, move_t* m) {
+	branch_t* b = &vecs->branches[depth];
+
 	b->m = m;
 	b->player=g->player;
 
@@ -141,7 +143,9 @@ void branch_enter(game_t* g, move_vecs_t* vecs, char depth, branch_t* b, move_t*
 	next_player(g);
 }
 
-void branch_exit(game_t* g, move_vecs_t* vecs, char depth, branch_t* b) {
+void branch_exit(game_t* g, move_vecs_t* vecs, char depth) {
+	branch_t* b = &vecs->branches[depth];
+
 	piece_t* from = board_get(g, b->m->from);
 	piece_t* to = board_get(g, b->m->to);
 
@@ -200,17 +204,16 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, char depth, int exchan
 			if (e) v2 += piece_value(g, vecs, target);
 
 			m.to[0] = pos[0]; m.to[1] = pos[1];
-			branch_t* b = &vecs->branches[depth];
 
 			if (++depth < AI_MAXDEPTH) {
-				branch_enter(g, vecs, depth, b, &m);
+				branch_enter(g, vecs, depth, &m);
 
 				//make the unrealistic assumption that all enemy teams are allied, benefits are shared
-				int inv = is_ally(vecs->ai_player, vecs->ai_p, g->player)!=is_ally(vecs->ai_player, vecs->ai_p, b->player);
+				int inv = is_ally(vecs->ai_player, vecs->ai_p, g->player)!=is_ally(vecs->ai_player, vecs->ai_p, vecs->branches[depth].player);
 				v2 = ai_find_move(vecs, g, inv ? -v2 : v2, depth, exchange || v2<gain);
 				if (inv) v2*=-1;
 
-				branch_exit(g, vecs, depth, b);
+				branch_exit(g, vecs, depth);
 			}
 
 			depth--;
@@ -250,6 +253,12 @@ void ai_make_move(game_t* g, move_t* out_m) {
 	g_move_vecs.ai_p = vector_get(&g->players, g->player);
 
 	unsigned len=0;
+
+	vector_iterator pm_iter = vector_iterate(&g_move_vecs.moves);
+	while (vector_next(&pm_iter)) {
+		piece_moves_t* pmoves = pm_iter.x;
+		vector_free(&pmoves->moves);
+	}
 
 	vector_clear(&g_move_vecs.moves);
 
