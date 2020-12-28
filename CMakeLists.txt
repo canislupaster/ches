@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.17)
 project(termchess C)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
 
 add_subdirectory(corecommon)
 include_directories(corecommon/src)
@@ -57,7 +56,7 @@ if(EMSCRIPTEN)
 
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/index.html ${CMAKE_SOURCE_DIR}/docs/index.html COPYONLY)
     set(EMCC_OPTIONS "SHELL:-s ASYNCIFY")
-    target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
+    target_compile_options(termchess PUBLIC ${EMCC_OPTIONS} -O3)
     target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")
 
     add_custom_command(TARGET termchess POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/termchess.wasm ${CMAKE_CURRENT_BINARY_DIR}/termchess.cbp ${CMAKE_CURRENT_BINARY_DIR}/termchess.js ${CMAKE_SOURCE_DIR}/docs/)

@@ -611,8 +611,6 @@ int html_elem_update(html_ui_t* ui, html_elem_t* elem) {
 			if (e->flags&html_list_child)
 				if (html_elem_update(ui, e)) child_iter.i--;
 		}
-
-		elem->flags ^= html_list;
 		//printf("updated children\n");
 	}
 

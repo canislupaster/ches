@@ -342,7 +342,6 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 			unsigned player = read_uint(&cur);
 			char* name = read_str(&cur);
 			if (player>=client->g.players.length) {
-				printf("%s\n", name);
 				vector_pushcpy(&client->g.m.spectators, &name);
 			} else {
 				player_t* p = vector_get(&client->g.players, player);
@@ -355,7 +354,6 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 		}
 		case mp_game_left: {
 			unsigned pnum = read_uint(&cur);
-			printf("%u %u\n", pnum, client->g.players.length);
 			pnum_leave(&client->g, pnum);
 			break;
 		}
