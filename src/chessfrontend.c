@@ -264,6 +264,7 @@ void chess_client_ai(chess_client_t* client) {
 	}
 
 	client->move_cursor = client->g.moves.length;
+	if (!client->g.won) client->player = client->g.player;
 }
 
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make) {
@@ -315,6 +316,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 
 			if (client->mode != mode_multiplayer) {
 				chess_client_initgame(client, mode_multiplayer, 0);
+				chess_client_set_move_cursor(client, client->g.moves.length);
 			}
 
 			break;
@@ -362,11 +364,11 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 			if (client->move_cursor==client->g.moves.length) {
 				make_move(&client->g, &m, 0, 1, client->g.player);
 				client->move_cursor++;
+				refresh_hints(client);
 			} else {
 				make_move(&client->g, &m, 0, 0, client->g.player);
 			}
 
-			refresh_hints(client);
 			break;
 		}
 		case mp_move_undone: {
@@ -391,8 +393,6 @@ int client_make_move(chess_client_t* client) {
 		if (client->mode==mode_singleplayer) {
 			chess_client_ai(client);
 			refresh_hints(client);
-
-			client->player = client->g.player;
 		} else if (client->mode==mode_multiplayer) {
 			client->move_cursor++;
 

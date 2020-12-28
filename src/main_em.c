@@ -20,7 +20,7 @@ char* boards[NUM_BOARDS*2] = {
 #include "../include/heirchess.board"
 };
 
-#define DEFAULT_SERVADDR "167.172.222.101"
+#define DEFAULT_SERVADDR "wss://esochess.net"
 
 typedef struct {
 	html_ui_t ui;

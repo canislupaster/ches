@@ -502,8 +502,6 @@ client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* a
 
 #elif defined(__EMSCRIPTEN__)
 
-	char* url = heapstr("ws://%s:%i", serv, port);
-
 	MAIN_THREAD_EM_ASM({
 		 sock = new WebSocket(UTF8ToString($0));
 		 sock.addEventListener("message", (ev) => {
@@ -517,9 +515,7 @@ client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* a
 		 sock.addEventListener("error", (ev) => {
 				 _client_err_cb($1);
 		 });
-	}, url, client);
-
-	drop(url);
+	}, serv, client);
 
 	client->msg_buf = vector_new(sizeof(vector_t));
 
