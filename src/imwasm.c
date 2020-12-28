@@ -454,8 +454,12 @@ html_elem_t* html_start_tr(html_ui_t* ui) {
 	return e;
 }
 
+html_elem_t* html_td(html_ui_t* ui, char* txt) {
+	return html_elem_new(ui, "td", NULL, txt);
+}
+
 html_elem_t* html_start_td(html_ui_t* ui) {
-	html_elem_t* e = html_elem_new(ui, "td", NULL, NULL);
+	html_elem_t* e = html_td(ui, NULL);
 	html_start(ui, e, 1);
 	return e;
 }

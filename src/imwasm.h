@@ -95,6 +95,7 @@ html_elem_t* html_start_div(html_ui_t* ui, char* id, int list);
 html_elem_t* html_start_select(html_ui_t* ui, char* id);
 html_elem_t* html_start_table(html_ui_t* ui, char* id);
 html_elem_t* html_start_tr(html_ui_t* ui);
+html_elem_t* html_td(html_ui_t* ui, char* txt);
 html_elem_t* html_start_td(html_ui_t* ui);
 html_elem_t* html_img(html_ui_t* ui, char* id, char* src);
 html_elem_t* html_h(html_ui_t* ui, int l, char* id, char* text);

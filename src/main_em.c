@@ -430,17 +430,9 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_start_table(ui, "players");
 				html_start_tr(ui);
 
-				html_start_td(ui);
-				html_p(ui, NULL, "ai");
-				html_end(ui);
-
-				html_start_td(ui);
-				html_p(ui, NULL, "you");
-				html_end(ui);
-
-				html_start_td(ui);
-				html_p(ui, NULL, "player name");
-				html_end(ui);
+				html_td(ui, "ai");
+				html_td(ui, "you");
+				html_td(ui, "player name");
 
 				html_end(ui);
 
@@ -459,9 +451,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 					html_radio(ui, NULL, "chosenplayer", istr, p_iter.i==0);
 					html_end(ui);
 
-					html_start_td(ui);
-					html_p(ui, NULL, p->name);
-					html_end(ui);
+					html_td(ui, p->name);
 
 					drop(istr);
 					html_end(ui);
