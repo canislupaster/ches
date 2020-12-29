@@ -9,10 +9,11 @@
 #include "cyclingindex.h"
 #define HTML_STACK_SZ 10
 typedef enum {
+	html_timeout,
+	html_deferred,
 	html_click,
 	html_keypress,
 	html_onchange,
-	html_timeout,
 	html_drag,
 	html_drop,
 	html_custom
@@ -79,12 +80,15 @@ typedef struct html_ui {
 	update_t update;
 	render_t render;
 
+	vector_t deferred;
+
 	//list element indices are cleared after two cycles
 	cycling_index_t cin;
 } html_ui_t;
 html_ui_t html_ui_new();
 void html_send(html_ui_t* ui, unsigned action, void* data);
 void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data);
+void html_defer(html_ui_t* ui, unsigned action, void* data);
 void html_playsound(html_ui_t* ui, char* sound, double vol);
 void html_event(html_ui_t* ui, html_elem_t* elem, html_event_ty ty, unsigned action);
 void html_start(html_ui_t* ui, html_elem_t* elem, int list);

@@ -394,10 +394,7 @@ int client_make_move(chess_client_t* client) {
 	if (vector_search(&client->hints, client->select.to)!=-1) {
 		make_move(&client->g, &client->select, 0, 1, client->player);
 
-		if (client->mode==mode_singleplayer) {
-			chess_client_ai(client);
-			refresh_hints(client);
-		} else if (client->mode==mode_multiplayer) {
+		if (client->mode==mode_multiplayer) {
 			client->move_cursor++;
 
 			vector_t data = vector_new(1);

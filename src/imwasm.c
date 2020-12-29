@@ -12,10 +12,11 @@ struct html_elem;
 struct html_ui;
 
 typedef enum {
+	html_timeout,
+	html_deferred,
 	html_click,
 	html_keypress,
 	html_onchange,
-	html_timeout,
 	html_drag,
 	html_drop,
 	html_custom
@@ -95,12 +96,14 @@ typedef struct html_ui {
 	update_t update;
 	render_t render;
 
+	vector_t deferred;
+
 	//list element indices are cleared after two cycles
 	cycling_index_t cin;
 } html_ui_t;
 
 html_ui_t html_ui_new() {
-	html_ui_t ui = {.elem_id=map_new(), .cur=NULL, .cur_i=0, .cin=cindex_new(2)};
+	html_ui_t ui = {.elem_id=map_new(), .cur=NULL, .cur_i=0, .cin=cindex_new(2), .deferred=vector_new(sizeof(html_event_t))};
 	map_configure_string_key(&ui.elem_id, sizeof(html_elem_t*));
 
 	memset(ui.cur, 0, sizeof(html_elem_t*) * HTML_STACK_SZ);
@@ -132,17 +135,30 @@ void html_select(html_elem_t* elem) {
 
 void html_render(html_ui_t* ui);
 
-void html_send(html_ui_t* ui, unsigned action, void* data) {
-	ui->update(ui, &(html_event_t){.ty=html_custom, .ui=ui, .action=action, .custom_data=data}, ui->arg);
+void html_updaterender(html_ui_t* ui, html_event_t* ev) {
+	ui->update(ui, ev, ui->arg);
 	html_render(ui);
+
+	while (ui->deferred.length) {
+		emscripten_sleep(100); //apparently dom will update with 0 ms, but ~100 ms needed to load images
+
+		ev = vector_get(&ui->deferred, ui->deferred.length-1);
+		ui->update(ui, ev, ui->arg);
+		html_render(ui);
+
+		vector_pop(&ui->deferred);
+	}
+}
+
+void html_send(html_ui_t* ui, unsigned action, void* data) {
+	html_updaterender(ui, &(html_event_t){.ty=html_custom, .ui=ui, .action=action, .custom_data=data});
 }
 
 EMSCRIPTEN_KEEPALIVE
 int html_cb(html_event_t* ev, char* dropdata) {
 	if (ev->ty==html_drop) ev->dropdata=dropdata;
 
-	ev->ui->update(ev->ui, ev, ev->ui->arg);
-	html_render(ev->ui);
+	html_updaterender(ev->ui, ev);
 
 	if (ev->ty==html_timeout) drop(ev);
 	else if (ev->ty==html_drop) drop(ev->dropdata);
@@ -158,6 +174,11 @@ void html_settimeout(html_ui_t* ui, unsigned ms, unsigned action, void* data) {
 			_html_cb($0, 0);
 		}, $1);
 	}, ev, ms);
+}
+
+void html_defer(html_ui_t* ui, unsigned action, void* data) {
+	html_event_t ev = {.ty=html_deferred, .action=action, .ui=ui, .custom_data=data};
+	vector_pushcpy(&ui->deferred, &ev);
 }
 
 void html_playsound(html_ui_t* ui, char* sound, double vol) {

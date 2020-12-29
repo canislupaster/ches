@@ -62,6 +62,7 @@ typedef enum {
 	a_select,
 	a_dropmove,
 	a_dragmove,
+	a_doai,
 	a_checkdisplayed,
 	a_undo_move,
 	a_back
@@ -101,8 +102,12 @@ void web_moved(html_ui_t* ui, chess_web_t* web) { //move fx
 }
 
 void web_move(html_ui_t* ui, chess_web_t* web) { //wrapper level=3
-	if (client_make_move(&web->client) && web->client.mode==mode_singleplayer) {
-		web_moved(ui, web);
+	if (client_make_move(&web->client)) {
+		if (web->client.mode==mode_singleplayer) {
+			html_defer(ui, a_doai, NULL);
+		} else {
+			web_moved(ui, web);
+		}
 	}
 
 	web->client.select.from[0] = -1;
@@ -317,6 +322,13 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			web_move(ui, web);
 			web->which=0;
 
+			break;
+		}
+		case a_doai: {
+			chess_client_ai(&web->client);
+			refresh_hints(&web->client);
+
+			web_moved(ui, web);
 			break;
 		}
 		case a_checkdisplayed: {
@@ -625,6 +637,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			html_end(ui); //table
 			html_end(ui); //wrapper
 
+			printf("%i\n", web->check_displayed);
 			if (!web->check_displayed && t->check) {
 				html_start_div(ui, "flash", 0);
 				html_p(ui, "flashtxt", t->mate ? "CHECKMATE!" : "CHECK!");

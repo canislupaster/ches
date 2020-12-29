@@ -64,6 +64,7 @@ void read_game(cur_t* cur, game_t* g, char* joined);
 void refresh_hints(chess_client_t* client);
 void set_move_cursor(game_t* g, unsigned* cur, unsigned i);
 void chess_client_set_move_cursor(chess_client_t* client, unsigned i);
+void chess_client_ai(chess_client_t* client);
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make);
 void pnum_leave(game_t* g, unsigned pnum);
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur);
