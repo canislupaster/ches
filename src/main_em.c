@@ -137,6 +137,8 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 					case menu_chooseplayer: {
 						game_free(&web->client.g);
 						if (web->menu_multiplayer) drop(web->gname);
+						web->client.mode = menu_makegame;
+						break;
 					}
 					case menu_connect: {
 						web->menustate = menu_main; break;

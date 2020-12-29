@@ -322,7 +322,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 
 			if (client->mode != mode_multiplayer) {
 				chess_client_initgame(client, mode_multiplayer, 0);
-				chess_client_set_move_cursor(client, client->g.moves.length);
+				client->move_cursor = client->g.moves.length;
 			}
 
 			break;
