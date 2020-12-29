@@ -321,8 +321,6 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 					}
 
 					if (parsed_req && ws_key && is_upgrade) {
-						*upgraded=1;
-
 						char hash[SHA_DIGEST_LENGTH];
 						char* ws_cat = stradd(ws_key, WS_GUID);
 						SHA1((unsigned char*)ws_cat, strlen(ws_cat), (unsigned char*)hash);
@@ -331,6 +329,8 @@ cur_t server_recv(server_t* serv, unsigned* i) {
 						char* resp = heapstr(WS_RESP, b64_hash);
 
 						if (send(pfd->fd, resp, strlen(resp), 0)==-1) hup=1;
+
+						*upgraded=1;
 
 						drop(resp);
 						drop(b64_hash);
