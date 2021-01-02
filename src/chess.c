@@ -143,22 +143,6 @@ void rot_pos(int rot, int pos[2], int pos_out[2])	{
 	}
 }
 
-char* piece_str(piece_t* p) {
-	char* pcs[] = {"♚","♛","♜","♝","♞","♟", "A", "C", "H", " ","█"};
-	return pcs[p->ty];
-}
-
-//"debugging"
-void print_board(game_t* g) {
-	vector_iterator board_iter = vector_iterate(&g->board);
-	while (vector_next(&board_iter)) {
-		if (board_iter.i%g->board_w==0) printf("\n");
-		printf(" %s ", piece_str(board_iter.x));
-	}
-
-	printf("\n");
-}
-
 struct pawn_adj {int adj[2][2];} pawn_adjacent(int dir[2]) {
 	int not[2] = {!dir[0],!dir[1]};
 	return (struct pawn_adj){.adj={{not[0]+dir[0],not[1]+dir[1]}, {-not[0]+dir[0],-not[1]+dir[1]}}};
@@ -180,6 +164,23 @@ int is_ally(char p_i, player_t* p, char p2) {
 	return p_i==p2 || memchr(p->allies.data, p2, p->allies.length)!=NULL;
 }
 
+char* piece_str(piece_t* p) {
+	char* pcs[] = {"♚","♛","♜","♝","♞","♟", "A", "C", "H", " ","█"};
+	return pcs[p->ty];
+}
+
+//"debugging"
+void print_board(game_t* g) {
+	vector_iterator board_iter = vector_iterate(&g->board);
+	while (vector_next(&board_iter)) {
+		if (board_iter.i%g->board_w==0) printf("\n");
+		piece_t* p = board_iter.x;
+		printf(" %i%s ", piece_edible(p) ? p->player : 0, piece_str(p));
+	}
+
+	printf("\n");
+}
+
 //any non long range pieces (non-colliding) are excluded from checking the king after their players move
 int piece_long_range(piece_ty ty) {
 	switch (ty) {
@@ -190,11 +191,10 @@ int piece_long_range(piece_ty ty) {
 }
 
 //valid move, no check check
-int valid_move(game_t* g, move_t* m) {
+int valid_move(game_t* g, move_t* m, int collision) {
 	int off[2] = {m->to[0] - m->from[0], m->to[1] - m->from[1]};
 
 	piece_t* p = board_get(g, m->from);
-	int collision=1;
 	switch (p->ty) {
 		case p_blocked:
 		case p_empty: return 0;
@@ -219,7 +219,6 @@ int valid_move(game_t* g, move_t* m) {
 			if ((abs(off[1])!=2||abs(off[0])!=1)&&(abs(off[1])!=1||abs(off[0])!=2)) {
 				if ((p->ty==p_chancellor && (off[0]==0 || off[1]==0))
 						|| (p->ty==p_archibishop && abs(off[0])==abs(off[1]))) {
-					collision=1;
 					break;
 				} else {
 					return 0;
@@ -292,7 +291,7 @@ int player_check(game_t* g, char p_i, player_t* player) {
 	while (board_pos_next(g, mv.from)) {
 		piece_t* p = board_get(g, mv.from);
 		if (!is_ally(p_i, player, p->player)) {
-			if (valid_move(g, &mv)) return 1;
+			if (valid_move(g, &mv, 1)) return 1;
 		}
 	}
 
@@ -493,7 +492,7 @@ int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
 
 	if (!piece_long_range(p->ty)) {
 		if (is_ally(p->player, vector_get(&g->players, p->player), board_get(g, other)->player)) {
-			return valid_move(g, &m);
+			return valid_move(g, &m, 1);
 		} else {
 			return 0;
 		}
@@ -501,7 +500,7 @@ int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
 
 	//is this seriously faster than just repeating piece_moves
 	//update: yes
-	return valid_move(g, &m);
+	return valid_move(g, &m, 1);
 }
 
 int piece_moves_modified(game_t* g, piece_t* p, int pos[2], move_t* m) {
@@ -573,7 +572,7 @@ enum {
 	if (validate) {
 		if (!to || to->ty == p_blocked || (to->ty != p_empty && is_ally(player, t, to->player)))
 			return move_invalid;
-		if (!valid_move(g, m)) return move_invalid;
+		if (!valid_move(g, m, 1)) return move_invalid;
 	}
 
 	if (make || validate) {

@@ -57,6 +57,8 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		}
 	}
 
+	printf("%u pnum %u left %i\n", i, pnum, left);
+
 	map_remove(&cserv->num_joined, &i);
 
 	vector_t data = vector_new(1);

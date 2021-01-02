@@ -1615,43 +1615,43 @@ var tempI64;
 // === Body ===
 
 var ASM_CONSTS = {
-  1226: function($0, $1) {sock = new WebSocket(UTF8ToString($0)); sock.addEventListener("message", (ev) => { ev.data.arrayBuffer().then((abuf) => { let buf = _malloc(abuf.byteLength); HEAP8.set(new Uint8Array(abuf), buf); _client_recv_cb(buf, abuf.byteLength, $1); }); }); sock.addEventListener("error", (ev) => { _client_err_cb($1); });},  
- 1542: function() {return sock.readyState;},  
- 1566: function($0, $1) {sock.send(HEAP8.subarray($0, $0+$1));},  
- 1608: function() {sock.close();},  
- 1697: function() {list_elem=[]; tocstr=(v)=>{ let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf; };},  
- 1823: function($0) {elem = document.getElementById(UTF8ToString($0)); if (elem==null) { console.log(UTF8ToString($0)); }},  
- 1928: function($0) {elem = list_elem[$0];},  
- 1954: function($0, $1) {window.setTimeout(()=>{ _html_cb($0, 0); }, $1);},  
- 2007: function($0, $1) {let sound = new Audio(UTF8ToString($0)); sound.volume = $1; sound.play();},  
- 2085: function($0) {elem.addEventListener("dragover", (ev) => { ev.preventDefault(); }); elem.addEventListener("drop", (ev) => { ev.preventDefault(); _html_cb($0, tocstr(ev.dataTransfer.getData("text/plain"))); });},  
- 2316: function($0) {elem.removeEventListener(UTF8ToString($0), null);},  
- 2370: function($0, $1) {elem.addEventListener(UTF8ToString($0), (ev) => { if (_html_cb($1, 0)==1) ev.preventDefault(); });},  
- 2473: function() {elem.remove()},  
- 2487: function() {elem=document.body;},  
- 2507: function($0, $1) {list_elem[$1] = elem.appendChild(document.createElement(UTF8ToString($0)));},  
- 2587: function($0, $1) {elem.appendChild(document.createElement(UTF8ToString($0))).id = UTF8ToString($1);},  
- 2673: function($0) {list_elem[$0]=elem;},  
- 2693: function($0) {($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)},  
- 2778: function() {elem.innerText = "";},  
- 2801: function($0) {elem.innerText = UTF8ToString($0);},  
- 3002: function() {return tocstr(elem.value);},  
- 3033: function($0) {for (x of document.getElementsByName(UTF8ToString($0))) { if (x.checked) return tocstr(x.value); } return 0;},  
- 3146: function($0) {elems = Array.prototype.slice.call(document.getElementsByName(UTF8ToString($0)));},  
- 3228: function() {while (elems.length>0) { elem = elems.shift(); if (elem.checked) return tocstr(elem.value); } return 0;},  
- 3336: function() {return elem.checked;},  
- 3359: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
- 3536: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
- 3603: function($0) {elem.classList.remove(UTF8ToString($0))},  
- 3645: function() {elem.value="";},  
- 3662: function() {elem.addEventListener("dragstart", null); elem.setAttribute("draggable", "false");},  
- 3749: function($0) {elem.removeAttribute(UTF8ToString($0))},  
- 3790: function($0) {elem.classList.add(UTF8ToString($0))},  
- 3827: function($0) {elem.value = UTF8ToString($0);},  
- 3858: function($0) {if ($0!=0) { var s = UTF8ToString($0); elem.addEventListener("dragstart", (ev) => { ev.dataTransfer.setData("text/plain", s); }); } elem.setAttribute("draggable", "true");},  
- 4034: function($0) {elem.setAttribute(UTF8ToString($0), "")},  
- 4074: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1));},  
- 4129: function() {Module.noExitRuntime = true;}
+  1210: function($0, $1) {sock = new WebSocket(UTF8ToString($0)); sock.addEventListener("message", (ev) => { ev.data.arrayBuffer().then((abuf) => { let buf = _malloc(abuf.byteLength); HEAP8.set(new Uint8Array(abuf), buf); _client_recv_cb(buf, abuf.byteLength, $1); }); }); sock.addEventListener("error", (ev) => { _client_err_cb($1); });},  
+ 1526: function() {return sock.readyState;},  
+ 1550: function($0, $1) {sock.send(HEAP8.subarray($0, $0+$1));},  
+ 1592: function() {sock.close();},  
+ 1650: function() {list_elem=[]; tocstr=(v)=>{ let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf; };},  
+ 1776: function($0) {elem = document.getElementById(UTF8ToString($0)); if (elem==null) { console.log(UTF8ToString($0)); }},  
+ 1881: function($0) {elem = list_elem[$0];},  
+ 1907: function($0, $1) {window.setTimeout(()=>{ _html_cb($0, 0); }, $1);},  
+ 1960: function($0, $1) {let sound = new Audio(UTF8ToString($0)); sound.volume = $1; sound.play();},  
+ 2038: function($0) {elem.addEventListener("dragover", (ev) => { ev.preventDefault(); }); elem.addEventListener("drop", (ev) => { ev.preventDefault(); _html_cb($0, tocstr(ev.dataTransfer.getData("text/plain"))); });},  
+ 2269: function($0) {elem.removeEventListener(UTF8ToString($0), null);},  
+ 2323: function($0, $1) {elem.addEventListener(UTF8ToString($0), (ev) => { if (_html_cb($1, 0)==1) ev.preventDefault(); });},  
+ 2426: function() {elem.remove()},  
+ 2440: function() {elem=document.body;},  
+ 2460: function($0, $1) {list_elem[$1] = elem.appendChild(document.createElement(UTF8ToString($0)));},  
+ 2540: function($0, $1) {elem.appendChild(document.createElement(UTF8ToString($0))).id = UTF8ToString($1);},  
+ 2626: function($0) {list_elem[$0]=elem;},  
+ 2646: function($0) {($0 ? document.getElementById(UTF8ToString($0)) : document.body).appendChild(elem)},  
+ 2731: function() {elem.innerText = "";},  
+ 2754: function($0) {elem.innerText = UTF8ToString($0);},  
+ 2954: function() {return tocstr(elem.value);},  
+ 2985: function($0) {for (x of document.getElementsByName(UTF8ToString($0))) { if (x.checked) return tocstr(x.value); } return 0;},  
+ 3098: function($0) {elems = Array.prototype.slice.call(document.getElementsByName(UTF8ToString($0)));},  
+ 3180: function() {while (elems.length>0) { elem = elems.shift(); if (elem.checked) return tocstr(elem.value); } return 0;},  
+ 3288: function() {return elem.checked;},  
+ 3311: function($0) {let v = window.localStorage.getItem(UTF8ToString($0)); if (v==null) return 0; let len = lengthBytesUTF8(v)+1; let buf = _malloc(len); stringToUTF8(v, buf, len); return buf;},  
+ 3488: function($0, $1) {window.localStorage.setItem(UTF8ToString($0), UTF8ToString($1));},  
+ 3555: function($0) {elem.classList.remove(UTF8ToString($0))},  
+ 3597: function() {elem.value="";},  
+ 3614: function() {elem.addEventListener("dragstart", null); elem.setAttribute("draggable", "false");},  
+ 3701: function($0) {elem.removeAttribute(UTF8ToString($0))},  
+ 3742: function($0) {elem.classList.add(UTF8ToString($0))},  
+ 3779: function($0) {elem.value = UTF8ToString($0);},  
+ 3810: function($0) {if ($0!=0) { var s = UTF8ToString($0); elem.addEventListener("dragstart", (ev) => { ev.dataTransfer.setData("text/plain", s); }); } elem.setAttribute("draggable", "true");},  
+ 3986: function($0) {elem.setAttribute(UTF8ToString($0), "")},  
+ 4026: function($0, $1) {elem.setAttribute(UTF8ToString($0), UTF8ToString($1));},  
+ 4081: function() {Module.noExitRuntime = true;}
 };
 
 
@@ -3188,8 +3188,15 @@ function callMain(args) {
 
   var entryFunction = Module['_main'];
 
-  var argc = 0;
-  var argv = 0;
+  args = args || [];
+
+  var argc = args.length+1;
+  var argv = stackAlloc((argc + 1) * 4);
+  HEAP32[argv >> 2] = allocateUTF8OnStack(thisProgram);
+  for (var i = 1; i < argc; i++) {
+    HEAP32[(argv >> 2) + i] = allocateUTF8OnStack(args[i - 1]);
+  }
+  HEAP32[(argv >> 2) + argc] = 0;
 
   try {
 

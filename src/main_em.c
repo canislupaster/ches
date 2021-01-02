@@ -637,7 +637,6 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			html_end(ui); //table
 			html_end(ui); //wrapper
 
-			printf("%i\n", web->check_displayed);
 			if (!web->check_displayed && t->check) {
 				html_start_div(ui, "flash", 0);
 				html_p(ui, "flashtxt", t->mate ? "CHECKMATE!" : "CHECK!");
