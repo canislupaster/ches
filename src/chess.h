@@ -71,23 +71,19 @@ typedef struct {
 	piece_t piece_swap; //emulating moves is needed when evaluating possible moves or creating a game tree, maybe later augment into a stack
 	mp_extra_t m;
 } game_t;
-int pos_i(game_t* g, int x[2]);
 piece_t* board_get(game_t* g, int x[2]);
 int board_i(game_t* g, piece_t* ptr);
-void board_pos_i(game_t* g, int pos[2], int i);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 int piece_edible(piece_t* p);
 int piece_owned(piece_t* p, char player);
 int is_ally(char p_i, player_t* p, char p2);
 void print_board(game_t* g);
-int piece_long_range(piece_ty ty);
-int valid_move(game_t* g, move_t* m, int collision);
 int board_pos_next(game_t* g, int* x);
 int player_check(game_t* g, char p_i, player_t* player);
 void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
 void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to);
 void move_swap(game_t* g, move_t* m);
-void piece_moves(game_t* g, piece_t* p, vector_t* moves);
+void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check);
 int piece_moves_modified(game_t* g, piece_t* p, int pos[2], move_t* m);
 void next_player(game_t* g);
 enum {

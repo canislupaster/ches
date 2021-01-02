@@ -446,7 +446,7 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 	}
 }
 
-void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
+void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check) {
 	move_t m;
 	board_pos(g, m.from, p);
 	piece_moves_rec(g, m.from, p->ty, p, moves);
@@ -464,6 +464,8 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves) {
 		}
 
 		m.to[0]=to[0]; m.to[1]=to[1];
+
+		if (!check) continue;
 
 		move_swap(g, &m);
 		int end = player_check(g, p->player, player);
@@ -536,7 +538,7 @@ void update_checks_mates(game_t* g) {
 			while (vector_next(&board_iter)) {
 				piece_t* p = board_iter.x;
 				if (piece_owned(p, t_iter.i)) {
-					piece_moves(g, p, &moves);
+					piece_moves(g, p, &moves, 1);
 					if (moves.length>0) {
 						t->mate=0;
 						break;

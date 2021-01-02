@@ -21,7 +21,7 @@ float piecety_value(piece_ty ty) {
 }
 
 #define AI_RANGEVAL 0
-#define AI_DIMINISH 1.1f //diminish returns by this, otherwise ai thinks an easily evaded checkmate is inevitable
+#define AI_DIMINISH 1.5f //diminish returns by this, otherwise ai thinks an easily evaded checkmate is inevitable
 
 #define AI_DEPTH 2 //minimum search
 #define AI_MAXDEPTH 30 //eventual depth
@@ -109,56 +109,7 @@ void branch_push(move_vecs_t* vecs) {
 	vector_pushcpy(&vecs->sbranch->branches, &(branch_t){.checks={0}});
 }
 
-//shit man
-//pretty crappy workaround to preserve memoization even when the pin status of pieces changes
-//updates middlemen between a piece and kings or a given king (when the king moves, set to move positions)
-int branch_moves_blocked(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, piece_moves_t* pmoves, int king[2]) {
-	int blocked=0;
-	player_t* player = vector_get(&g->players, pmoves->p->player);
-
-	if (king) {
-		move_t m = {.from={pmoves->pos[0], pmoves->pos[1]}, .to={king[0], king[1]}};
-		blocked = valid_move(g, &m, 0);
-	} else {
-		move_t m = {.from={pmoves->pos[0], pmoves->pos[1]}};
-		vector_iterator p_iter = vector_iterate(&g->players);
-		while (vector_next(&p_iter)) {
-			if (is_ally(pmoves->p->player, player, p_iter.i)) {
-				continue;
-			}
-
-			board_pos_i(g, m.to, ((player_t*)p_iter.x)->king);
-			if (valid_move(g, &m, 0)) {
-				blocked=1;
-				break;
-			}
-		}
-	}
-
-	if (!blocked) return 0;
-
-	int lrange = piece_long_range(pmoves->p->ty);
-
-	vector_iterator move_iter = vector_iterate(&pmoves->moves.vec);
-	while (vector_next(&move_iter)) {
-		int* to = move_iter.x;
-		piece_moves_t* pmoves_target = vector_get(&vecs->moves, pos_i(g, to));
-
-		if (pmoves_target->p->ty==p_king || !piece_edible(pmoves_target->p) || is_ally(pmoves->p->player, player, pmoves_target->p->player))
-			continue;
-
-		if (lrange && !pmoves_target->modified[depth]) {
-			vector_clear(&pmoves_target->moves.vec);
-			piece_moves(g, pmoves_target->p, &pmoves_target->moves.vec);
-
-			pmoves->modified[depth] = 1;
-		}
-	}
-
-	return 1;
-}
-
-void branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_t m, char make, char enter) {
+int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_t m, char make, char enter) {
 	if (make) b->m = m;
 
 	piece_t* from = board_get(g, b->m.from);
@@ -176,58 +127,36 @@ void branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move
 		}
 	}
 
-	if (enter) {
-		piece_moves_t* pmoves_from = vector_get(&vecs->moves, pos_i(g, b->m.from));
-		branch_moves_blocked(g, vecs, b, depth, pmoves_from, NULL);
-	}
-
 	move_noswap(g, &b->m, from, to);
 
 	if (make) {
 		vector_iterator player_iter = vector_iterate(&g->players);
 		while (vector_next(&player_iter)) {
-			if (player_iter.i==b->player) {
-				if (vecs->checks[player_iter.i]) {
-					b->checks[player_iter.i] = 1;
-					if (enter) vecs->checks[player_iter.i] = 0;
-				} else {
-					b->checks[player_iter.i] = 0;
-				}
+			char check = (char)player_check(g, player_iter.i, player_iter.x);
 
-				continue;
+			if (check && player_iter.i==b->player) {
+				unmove_noswap(g, &b->m, from, to);
+				*from = b->piece_from;
+				*to = b->piece_to;
+				return 0;
 			}
 
-			char check = (char)player_check(g, player_iter.i, player_iter.x);
 			b->checks[player_iter.i] = check!=vecs->checks[player_iter.i];
 			if (enter) vecs->checks[player_iter.i] = check;
 		}
 	}
 
 	if (enter) {
-		piece_moves_t* pmoves_to = vector_get(&vecs->moves, pos_i(g, b->m.to));
-
-		vector_clear(&pmoves_to->moves.vec);
-		piece_moves(g, pmoves_to->p, &pmoves_to->moves.vec);
-		pmoves_to->modified[depth] = 1;
-
-		branch_moves_blocked(g, vecs, b, depth, pmoves_to, NULL);
-
 		vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 		while (vector_next(&pmoves_iter)) {
 			piece_moves_t* pmoves = pmoves_iter.x;
 
-			if (pmoves->modified[depth] || !piece_edible(pmoves->p)) continue;
-
-			if (to->ty==p_king) {
-				if (!branch_moves_blocked(g, vecs, b, depth, pmoves, b->m.from))
-					branch_moves_blocked(g, vecs, b, depth, pmoves, b->m.to);
-			}
+			if (!piece_edible(pmoves->p)) continue;
 
 			//when having >2 players, update moves if check is still ongoing
-			if (b->checks[pmoves->p->player] || vecs->checks[pmoves->p->player]
-					|| piece_moves_modified(g, pmoves->p, pmoves->pos, &b->m)) {
+			if (pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, &b->m)) {
 				vector_clear(&pmoves->moves.vec);
-				piece_moves(g, pmoves->p, &pmoves->moves.vec);
+				piece_moves(g, pmoves->p, &pmoves->moves.vec, 0);
 
 				pmoves->modified[depth] = 1;
 			}
@@ -237,10 +166,11 @@ void branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move
 		vecs->ally = (char)is_ally(vecs->ai_player, vecs->ai_p, g->player);
 	} else {
 		unmove_noswap(g, &b->m, from, to);
-
 		*from = b->piece_from;
 		*to = b->piece_to;
 	}
+
+	return 1;
 }
 
 void branch_reenter(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth) {
@@ -259,9 +189,9 @@ void branch_exit(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth) {
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
-		if (pmoves->p == from || pmoves->modified[depth]) {
+		if (pmoves->p==from || pmoves->modified[depth]) {
 			vector_clear(&pmoves->moves.vec);
-			piece_moves(g, pmoves->p, &pmoves->moves.vec);
+			piece_moves(g, pmoves->p, &pmoves->moves.vec, 0);
 			pmoves->modified[depth] = 0;
 		}
 	}
@@ -354,7 +284,6 @@ void ai_copy_best(move_vecs_t* vecs, branch_t* best, unsigned depth) {
 
 float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* best) {
 	float gain = -INFINITY;
-	if (v==-INFINITY) printf("wtf man lmao\n");
 
 	int exchange = depth >= vecs->finddepth;
 	char ally = vecs->ally;
@@ -379,14 +308,33 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 		m.from[0] = pmoves->pos[0];
 		m.from[1] = pmoves->pos[1];
 
-		moves |= pmoves->moves.vec.length>0;
-
 		vector_iterator move_iter = vector_iterate(&pmoves->moves.vec);
 		while (vector_next(&move_iter)) {
 			int* pos = move_iter.x;
+
+			m.to[0] = pos[0];
+			m.to[1] = pos[1];
+
 			piece_t* target = board_get(g, pos);
 
-			if (target->ty==p_king) {
+			int e = piece_edible(target);
+			if (exchange && !e) {
+				if (!moves) {
+					if (branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, m, 1, 0))
+						moves=1;
+				}
+
+				continue;
+			}
+
+			float v2 = v;
+			if (e) v2 += piece_value(g, vecs, target);
+
+			int eatking = target->ty==p_king;
+			if (!branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, m, 1, (char)space))
+				continue;
+
+			if (eatking) {
 				printf("eating king %u %i %u\n", bhash, g->player, *(unsigned*)vecs->checks);
 				vector_iterator b_iter = vector_iterate_end(&vecs->sbranch->branches);
 				vector_prev(&b_iter);
@@ -401,18 +349,6 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 
 				abort();
 			}
-
-			int e = piece_edible(target);
-
-			if (exchange && !e) continue;
-
-			float v2 = v;
-			if (e) v2 += piece_value(g, vecs, target);
-
-			m.to[0] = pos[0];
-			m.to[1] = pos[1];
-
-			branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, m, 1, (char)space);
 
 			if (space) {
 				branch_t subbest[AI_BRANCHDEPTH];
@@ -456,7 +392,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 
 	if (vecs->sbranch->branches.length>=4) printf("exiting %u %i %i, gain %f\n", bhash, exchange, depth, gain);
 
-	if (exchange && moves && (gain<v || gain==-INFINITY)) {
+	if (exchange && (gain!=-INFINITY || moves) && gain<v) {
 		if (!ally) {
 			int oldfd = vecs->finddepth;
 			vecs->finddepth = depth+1;
@@ -528,7 +464,7 @@ void ai_make_move(game_t* g, move_t* out_m) {
 		piece_moves_t pmoves = {.p=p, .pos={pos[0], pos[1]}};
 		memset(pmoves.modified, 0, AI_MAXDEPTH);
 		pmoves.moves = vector_alloc(vector_new(sizeof(int[2])), 0);
-		piece_moves(g, p, &pmoves.moves.vec);
+		piece_moves(g, p, &pmoves.moves.vec, 0);
 
 		len += pmoves.moves.vec.length;
 

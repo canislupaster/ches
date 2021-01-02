@@ -240,7 +240,7 @@ void refresh_hints(chess_client_t* client) {
 	vector_clear(&client->hints);
 	if (!p) return;
 	if (p->player==client->player) {
-		piece_moves(&client->g, p, &client->hints);
+		piece_moves(&client->g, p, &client->hints, 1);
 	}
 }
 
