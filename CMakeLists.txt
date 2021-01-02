@@ -44,6 +44,7 @@ endif()
 
 if(EMSCRIPTEN)
     file(COPY ./img DESTINATION ${CMAKE_SOURCE_DIR}/docs/)
+    file(COPY ./img/favicon.ico DESTINATION ${CMAKE_SOURCE_DIR}/docs/)
 
     file(GLOB BOARDS ./*.board)
     foreach(BOARD ${BOARDS})

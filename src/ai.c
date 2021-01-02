@@ -24,14 +24,14 @@ float piecety_value(piece_ty ty) {
 #define AI_DIMINISH 1.2f //diminish returns by this, otherwise ai thinks an easily evaded checkmate is inevitable
 
 #define AI_DEPTH 2 //minimum search
-#define AI_MAXDEPTH 30 //eventual depth
+#define AI_MAXDEPTH 60 //eventual depth
 #define AI_BRANCHDEPTH 4 //depth+exchangedepth
-#define AI_EXPECTEDLEN 100 //more than this number of moves, otherwise extend by log2(expected/len)
+#define AI_EXPECTEDLEN 12800 //more than this number of moves, otherwise extend by log2(expected/len)
 #define AI_LEN 10
 #define AI_MAXPLAYER 4
 
-char finddepth(unsigned len) {
-	return (char) max((int) roundf((log2f(AI_EXPECTEDLEN / (float) len) + 1) * AI_DEPTH), AI_DEPTH);
+int maxdepth(unsigned len) {
+	return (char)min(max((int)roundf((log2f(AI_EXPECTEDLEN/(float)len)+1)*AI_BRANCHDEPTH), AI_BRANCHDEPTH), AI_MAXDEPTH);
 }
 
 //take shortest checkmate, no matter depth
@@ -76,6 +76,7 @@ typedef struct move_vecs {
 	player_t* ai_p;
 
 	int finddepth;
+	int maxdepth;
 	int init;
 } move_vecs_t;
 
@@ -97,11 +98,8 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 #define CHECKMATE_VAL 1000.0f
 
 float checkmate_value(game_t* g, move_vecs_t* vecs) {
-	player_t* p = vector_get(&g->players, g->player);
-	int check = player_check(g, g->player, p);
-
 	//stalemate, indesirable to either player
-	if (!check) return (vecs->ally ? 1.0f : -1.0f) * CHECKMATE_VAL;
+	if (!vecs->checks[g->player]) return (vecs->ally ? 1.0f : -1.0f) * CHECKMATE_VAL;
 	else return CHECKMATE_VAL;
 }
 
@@ -292,7 +290,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 	unsigned bdepth = vecs->sbranch->depth + depth;
 
 	//space to find another move / another branch. there is space for the branch in 3 lines
-	int space = vecs->sbranch->branches.length < AI_MAXDEPTH && depth+1 < AI_BRANCHDEPTH;
+	int space = vecs->sbranch->branches.length < vecs->maxdepth && depth+1 < AI_BRANCHDEPTH;
 
 	move_t m;
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
@@ -432,9 +430,10 @@ void ai_make_move(game_t* g, move_t* out_m) {
 		vector_pushcpy(&g_move_vecs.moves, &pmoves);
 	}
 
-	//g_move_vecs.finddepth = finddepth(len / g->players.length);
-	printf("...\n");
-	//printf("len %u depth %i\n", len, g_move_vecs.finddepth);
+	//"depth"
+	g_move_vecs.maxdepth = maxdepth(len);
+	printf("len %u depth %i\n", len, g_move_vecs.maxdepth);
+	//"breadth"
 	g_move_vecs.finddepth = AI_DEPTH;
 
 	g_move_vecs.first.depth = 0;
@@ -456,7 +455,7 @@ void ai_make_move(game_t* g, move_t* out_m) {
 			superbranch_t* sbranch = sbranch_iter.x;
 			if (sbranch->keep) {
 				continue;
-			} else if (sbranch->branches.length >= AI_MAXDEPTH) {
+			} else if (sbranch->branches.length >= g_move_vecs.maxdepth) {
 				sbranch->keep=1;
 				continue;
 			} else {
@@ -497,7 +496,7 @@ void ai_make_move(game_t* g, move_t* out_m) {
 	vector_next(&sbranch_iter);
 	while (vector_next(&sbranch_iter)) {
 		superbranch_t* sb = sbranch_iter.x;
-		sb->v *= powf(AI_DIMINISH, (float)(AI_MAXDEPTH-sb->branches.length));
+		sb->v *= powf(AI_DIMINISH, (float)(g_move_vecs.maxdepth-sb->branches.length));
 		if (sb->v>max->v) max=sb;
 	}
 
