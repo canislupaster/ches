@@ -270,7 +270,7 @@ void chess_client_ai(chess_client_t* client) {
 	}
 
 	client->move_cursor = client->g.moves.length;
-	if (!client->g.won) client->player = client->g.player;
+	if (client->mode==mode_singleplayer && !client->g.won) client->player = client->g.player;
 }
 
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make) {
