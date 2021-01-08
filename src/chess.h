@@ -79,6 +79,7 @@ typedef struct {
 	piece_t piece_swap_from; //needed for eg. promotion, pawn_firstmv, etc
 	mp_extra_t m;
 } game_t;
+int pos_i(game_t* g, int x[2]);
 piece_t* board_get(game_t* g, int x[2]);
 int board_i(game_t* g, piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);

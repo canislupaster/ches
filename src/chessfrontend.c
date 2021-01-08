@@ -340,6 +340,22 @@ void set_move_cursor(game_t* g, unsigned* cur, unsigned i) {
 		*cur=0;
 		vector_free(&g->board);
 		vector_cpy(&g->init_board, &g->board);
+
+		vector_iterator p_iter = vector_iterate(&g->players);
+		while (vector_next(&p_iter)) {
+			player_t* p = p_iter.x;
+			vector_clear(&p->kings);
+			vector_pushcpy(&p->kings, &(int){-1});
+		}
+
+		int pos[2] = {-1, 0};
+		while (board_pos_next(g, pos)) {
+			piece_t* k = board_get(g, pos);
+			if (k->ty==p_king) {
+				player_t* p = vector_get(&g->players, k->player);
+				vector_insertcpy(&p->kings, 0, &(int){pos_i(g, pos)});
+			}
+		}
 	}
 
 	for (;*cur<i;(*cur)++) {

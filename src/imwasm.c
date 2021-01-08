@@ -751,6 +751,7 @@ void html_run(html_ui_t* ui, update_t update, render_t render, void* arg) {
 	ui->render = render;
 	ui->arg = arg;
 
+	MAIN_THREAD_EM_ASM(loadedUI(););
 	html_render(ui);
 
 	MAIN_THREAD_EM_ASM((Module.noExitRuntime = true;));

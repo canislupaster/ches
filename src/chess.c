@@ -367,8 +367,7 @@ void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to) {
 	player_t* p = vector_get(&g->players, to->player);
 
 	if (to->ty==p_king && ~g->flags&game_win_by_pieces) {
-		int* king=(int*)p->kings.data;
-		for (;*king!=-1;king++) {
+		for (int* king=(int*)p->kings.data; *king!=-1; king++) {
 			if (*king==pos_i(g, m->from)) {
 				*king = pos_i(g, m->to);
 				break;
@@ -394,8 +393,7 @@ void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to, piece_t fro
 		if (from_swap.ty!=p_king) {
 			vector_remove(&p->kings, 0);
 		} else {
-			int* king=(int*)p->kings.data;
-			for (;*king!=-1;king++) {
+			for (int* king=(int*)p->kings.data; *king!=-1; king++) {
 				if (*king==pos_i(g, m->to)) {
 					*king = pos_i(g, m->from);
 					break;

@@ -408,7 +408,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			case menu_main: {
 				html_h(ui, 1, "title", "esochess");
 				html_p(ui, "p1", "welcome to chess. images by wikimedians Cburnett and spinningspark.");
-				html_p(ui, "p2", " also epilepsy warning, some sequences may flash; now consider the following modes:");
+				html_p(ui, "p2", " also epilepsy warning, some sequences may flash and desist from using a mobile device to access this site; now consider the following modes:");
 
 				html_start_div(ui, "b", 0);
 
