@@ -622,9 +622,10 @@ void update_checks_mates(game_t* g, int undo) {
 	while (vector_next(&t_iter)) {
 		player_t* t = t_iter.x;
 		if (!undo) t->last_mate = t->mate;
+		else t->mate = t->last_mate;
 
-		if (!t->last_mate && player_check(g, (char)(t_iter.i), t)) {
-			t->check=1;
+		if (!t->last_mate && (g->flags & game_win_by_pieces || player_check(g, (char)(t_iter.i), t))) {
+			t->check=!(g->flags&game_win_by_pieces);
 			t->mate=1;
 
 			vector_t moves = vector_new(sizeof(move_t));

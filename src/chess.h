@@ -88,7 +88,6 @@ int piece_edible(piece_t* p);
 int piece_owned(piece_t* p, char player);
 int is_ally(char p_i, player_t* p, char p2);
 void print_board(game_t* g);
-int valid_move(game_t* g, move_t* m, int collision);
 int board_pos_next(game_t* g, int* x);
 int player_check(game_t* g, char p_i, player_t* player);
 void castle_to_pos(move_t* m, int* pos);
