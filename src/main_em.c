@@ -123,10 +123,6 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		case a_netmsg: {
 			mp_serv_t msg = *(mp_serv_t*)&ev->custom_data;
 			switch (msg) {
-				case mp_game_full: {
-					web->err = "that game is full, take another gamble";
-					break;
-				}
 				case mp_move_made: {
 					if (web->client.g.m.host == web->client.pnum) {
 						html_defer(ui, a_doai, NULL);
@@ -151,7 +147,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 					case menu_chooseplayer: {
 						game_free(&web->client.g);
 						if (web->menu_multiplayer) drop(web->gname);
-						web->client.mode = menu_makegame;
+						web->menustate = menu_makegame;
 						break;
 					}
 					case menu_connect: {
@@ -201,7 +197,14 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			html_local_set("addr", addr);
 
 			web->mp_name = html_input_value("name");
-			if (strlen(web->mp_name)!=0) {
+			unsigned len = strlen(web->mp_name);
+			if (len!=0) {
+				if (len>PLAYERNAME_MAXLEN) {
+					drop(web->mp_name);
+					web->err = "that name is distastefully tedious. shorten your words, or forget them";
+					break;
+				}
+
 				html_local_set("name", web->mp_name);
 			} else {
 				drop(web->mp_name);
@@ -231,8 +234,12 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		case a_chooseplayer: {
 			if (web->menu_multiplayer) {
 				web->gname = html_input_value("gname");
-				if (strlen(web->gname)==0) {
-					web->err="game name is empty";
+				unsigned len = strlen(web->gname);
+				if (len==0) {
+					web->err="game name is empty. do not skip fields, even if they are many";
+					drop(web->gname); break;
+				} else if (len>GAMENAME_MAXLEN) {
+					web->err = "that game name is too lame. perform a concision.";
 					drop(web->gname); break;
 				}
 			}
@@ -463,6 +470,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				char* b_i = html_input_value("boards");
 				if (streq(b_i, "custom")) {
 					html_textarea(ui, "customboard", boards[1]);
+					html_a(ui, "boardhelp", "board format", "/boardformat.html");
 				}
 
 				drop(b_i);
@@ -534,10 +542,11 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			html_p(ui, "p1", "henceforth, a new match may be made or picked from the following pool");
 
 			html_start_div(ui, "games", 1);
-			vector_iterator g_iter = vector_iterate(&web->client.game_list);
-			while (vector_next(&g_iter)) {
-				char* g = *(char**) g_iter.x;
-				html_elem_t* b = html_button(ui, NULL, g);
+			vector_iterator gl_iter = vector_iterate(&web->client.game_list);
+			while (vector_next(&gl_iter)) {
+				game_listing_t* gl = gl_iter.x;
+				html_elem_t* b = html_button(ui, NULL, gl->name);
+				if (gl->full) html_set_attr(b, html_class, NULL, "full");
 				html_event(ui, b, html_click, a_joingame);
 			}
 

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>board format</title>
+    <link rel="stylesheet" href="main.css">
+</head>
+<body>
+    <p>if parsing errors occur, likely some memory error or crash in console will be reported, since i havent augmented it with error checking, and it is only client side</p>
+    <p>when that happens your code is as broken as mine</p>
+
+    <h1>player section</h1>
+
+    <p>for each player, an integer representing the board rotation (their viewing angle, 0-3 counterclockwise) is required, followed by their name and a newline. example:</p>
+    <pre>
+0 White
+2 Black
+
+    </pre>
+    <p>note the blank line, terminating parsing of additional players</p>
+
+    <h1>board section</h1>
+    <p>the board is taken literally; every line is a row and columns are sequential. the board width is the width of the longest row. each column is either three spaces in a row, indicating an empty square, a player number (starting at zero) followed by a single character defining the piece. after the piece, arrows (^ or v or > or < or any of ↖↗↙↘) are optionally (mandatory for pawns) used to declare the direction the piece goes in (and when it may be promoted)</p>
+
+    <p>piece characters:</p>
+    <pre>
+K - king
+P - pawn
+H - "heir"/commoner, moves like a king but cannot be checked or mated
+Q - queen
+B - bishop
+N - knight
+R - rook
+A - archibishop (knight + bishop)
+C - chancellor (knight + rook)
+    </pre>
+
+    <p>finally, the board must end with a blank line, just like http requests (except the carriage return is omitted)</p>
+
+    <h1>example boards</h1>
+    <p>existing boards reside in the <a href="https://github.com/super-cilious/ches" style="font-weight: bold">github</a> with .board extension</p>
+</body>
+</html>

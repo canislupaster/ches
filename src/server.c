@@ -18,6 +18,7 @@ typedef struct {
 	game_t g;
 	vector_t player_num;
 	unsigned host; //pnum
+	char full;
 } mp_game_t;
 
 void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned num_exclude) {
@@ -43,7 +44,9 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 
 	mp_game_t** mg_ref = map_find(&cserv->num_joined, &i);
 	if (!mg_ref) return;
+	
 	mp_game_t* mg = *mg_ref;
+	unsigned g_i = vector_search(&cserv->games, &mg);
 
 	int left=0;
 
@@ -65,10 +68,8 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	map_remove(&cserv->num_joined, &i);
 
 	vector_t data = vector_new(1);
-	
-	if (!left) {
-		unsigned g_i = vector_search(&cserv->games, &mg);
 
+	if (!left) {
 		vector_pushcpy(&data, &(char){mp_game_list_removed});
 		write_uint(&data, g_i);
 		broadcast(cserv, &cserv->num_lobby, &data, 0);
@@ -84,6 +85,16 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	} else {
 		pnum_leave(&mg->g, pnum);
 
+		if (pnum<mg->g.players.length && mg->full) {
+			mg->full=0;
+			
+			vector_pushcpy(&data, &(char){mp_game_list_full});
+			write_uint(&data, g_i);
+			vector_pushcpy(&data, &(char){mg->full});
+			broadcast(cserv, &cserv->num_lobby, &data, 0);
+			vector_clear(&data);
+		}
+		
 		if (pnum==mg->g.m.host) mg->g.m.host = pnum_left;
 
 		vector_pushcpy(&data, &(char){mp_game_left});
@@ -119,6 +130,7 @@ int main(int argc, char** argv) {
 				vector_iterator game_iter = vector_iterate(&cserv.games);
 				while (vector_next(&game_iter)) {
 					mp_game_t* g = *(mp_game_t**)game_iter.x;
+					vector_pushcpy(&resp, &(char){g->full});
 					write_str(&resp, g->name);
 				}
 
@@ -130,18 +142,22 @@ int main(int argc, char** argv) {
 
 				game_t g;
 				char* g_name = read_str(&cur);
+				unsigned len = strlen(g_name);
+				if (len==0 || len>GAMENAME_MAXLEN) break;
 
-				char joined;
-				read_game(&cur, &g, &joined);
+				char joined, full;
+				read_game(&cur, &g, &joined, &full);
 
 				if (cur.err) {
+					if (g_name) drop(g_name);
 					break;
 				} else if (joined<0) {
+					if (g_name) drop(g_name);
 					game_free(&g);
 					break;
 				}
 
-				mp_game_t* mg = heapcpy(sizeof(mp_game_t), &(mp_game_t){.g=g, .name=g_name, .player_num=vector_new(sizeof(unsigned))});
+				mp_game_t* mg = heapcpy(sizeof(mp_game_t), &(mp_game_t){.g=g, .name=g_name, .player_num=vector_new(sizeof(unsigned)), .full=full});
 				mg->g.m.spectators = vector_new(sizeof(char*));
 				mg->g.m.host = (unsigned)joined;
 
@@ -153,6 +169,7 @@ int main(int argc, char** argv) {
 				vector_pushcpy(&cserv.games, &mg);
 				
 				vector_pushcpy(&resp, &(char){mp_game_list_new});
+				vector_pushcpy(&resp, &(char){mg->full});
 				write_str(&resp, g_name);
 				broadcast(&cserv, &cserv.num_lobby, &resp, 0);
 				vector_clear(&resp);	
@@ -174,16 +191,24 @@ int main(int argc, char** argv) {
 				}
 
 				mp_game_t* mg = *(mp_game_t**)vector_get(&cserv.games, g_i);
+				mg->full=1;
+				
 				vector_iterator p_iter = vector_iterate(&mg->g.players);
 				player_t* p;
+				unsigned p_i=-1;
+				
 				while (vector_next(&p_iter)) {
-				  p = p_iter.x;
-				  if (p->joined || p->mate) continue;
-				  break;
+				  player_t* p2 = p_iter.x;
+				  if (p2->joined || p2->mate) {
+				  	continue;
+				  } else if (p_i==-1) {
+				  	p=p2; p_i=p_iter.i;
+				  } else {
+				  	mg->full=0;
+				  }
 				}
 
-				int spectate = p_iter.i==mg->g.players.length;
-				if (spectate) {
+				if (p_i==-1) {
 					vector_pushcpy(&mg->g.m.spectators, &name);
 				} else {
 					p->joined = 1;
@@ -193,13 +218,21 @@ int main(int argc, char** argv) {
 					} else {
 						drop(name);
 					}
+					
+					if (mg->full) {
+						vector_pushcpy(&resp, &(char){mp_game_list_full});
+						write_uint(&resp, g_i);
+						vector_pushcpy(&resp, &(char){mg->full});
+						broadcast(&cserv, &cserv.num_lobby, &resp, 0);
+						vector_clear(&resp);
+					}
 				}
 
-				unsigned pnum = spectate ? p_iter.i + mg->g.m.spectators.length-1 : p_iter.i;
+				unsigned pnum = p_i==-1 ? mg->g.players.length+mg->g.m.spectators.length-1 : p_i;
 
 				vector_pushcpy(&resp, &(char){mp_game_joined});
 				write_uint(&resp, pnum);
-				write_str(&resp, spectate ? name : p->name);
+				write_str(&resp, p_i==-1 ? name : p->name);
 
 				broadcast(&cserv, &mg->player_num, &resp, 0);
 

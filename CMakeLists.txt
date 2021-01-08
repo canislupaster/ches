@@ -55,7 +55,11 @@ if(EMSCRIPTEN)
         file(WRITE "./include/${BOARD_NAME}" "${content}")
     endforeach()
 
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/index.html ${CMAKE_SOURCE_DIR}/docs/index.html COPYONLY)
+    file(GLOB RESOURCES ./res/*)
+    foreach(RES ${RESOURCES})
+        configure_file(${RES} ${CMAKE_SOURCE_DIR}/docs/ COPYONLY)
+    endforeach()
+
     set(EMCC_OPTIONS "SHELL:-s ASYNCIFY -s ASSERTIONS=1")
     target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
     target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")

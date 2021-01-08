@@ -40,7 +40,7 @@ typedef struct __attribute__ ((__packed__)) {
 } move_t;
 typedef struct {
 	int board_rot;
-	char check, mate;
+	char check, mate, last_mate;
 	char ai;
 
 	vector_t kings;

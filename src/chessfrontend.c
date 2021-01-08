@@ -11,6 +11,8 @@ typedef enum {
 } client_mode_t;
 
 #define MP_PORT 1093
+#define PLAYERNAME_MAXLEN 20
+#define GAMENAME_MAXLEN 20
 
 // i cant make a thousand structs (some of which have nothing other than a flexible array)
 // to document the "protocol" so i guess we use comments to indicate what goes after the op
@@ -28,9 +30,9 @@ typedef enum {
 typedef enum {
 	mp_game_list, //unsigned games, game names
 	mp_game_list_new, //game name
+	mp_game_list_full,
 	mp_game_list_removed, //unsigned game
 
-	mp_game_full,
 	mp_game_made,
 
 	mp_game, //players, board, moves, player #
@@ -85,8 +87,10 @@ void write_players(vector_t* data, game_t* g) {
 	}
 }
 
-void read_players(cur_t* cur, game_t* g, char* joined) {
+void read_players(cur_t* cur, game_t* g, char* joined, char* full) {
 	if (joined) *joined = -1;
+	if (full) *full = 1;
+
 	g->players = vector_new(sizeof(player_t));
 	char num_players = read_chr(cur);
 	if (num_players<=0) cur->err=1;
@@ -104,8 +108,18 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 		p->ai = read_chr(cur);
 		p->mate = read_chr(cur);
 		p->joined = read_chr(cur);
+
 		if (joined && !p->ai && p->joined) *joined = i;
+		else if (full && !p->ai) *full = 0;
+
 		p->name = read_str(cur);
+
+		if (cur->err==0 && strlen(p->name)>PLAYERNAME_MAXLEN) {
+			cur->err=1;
+		}
+
+		p->kings = vector_new(sizeof(int));
+		vector_pushcpy(&p->kings, &(int){-1});
 
 		p->allies = vector_new(1);
 		char len = read_chr(cur);
@@ -117,9 +131,6 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 			char ally = read_chr(cur);
 			vector_pushcpy(&p->allies, &ally);
 		}
-
-		p->kings = vector_new(sizeof(int));
-		vector_pushcpy(&p->kings, &(int){-1});
 	}
 }
 
@@ -261,7 +272,7 @@ void write_game(vector_t* data, game_t* g) {
 	write_moves(data, g);
 }
 
-void read_game(cur_t* cur, game_t* g, char* joined) {
+void read_game(cur_t* cur, game_t* g, char* joined, char* full) {
 	g->won=0;
 	g->flags = read_uint(cur);
 
@@ -290,7 +301,7 @@ void read_game(cur_t* cur, game_t* g, char* joined) {
 		vector_pushcpy(&g->castleable, &(char){read_chr(cur)});
 	}
 
-	read_players(cur, g, joined);
+	read_players(cur, g, joined, full);
 	read_board(cur, g);
 	read_initboard(cur, g);
 	read_moves(cur, g);
@@ -303,6 +314,11 @@ void read_game(cur_t* cur, game_t* g, char* joined) {
 void mp_extra_free(mp_extra_t* m) {
 	vector_free(&m->spectators);
 }
+
+typedef struct {
+	char full;
+	char* name;
+} game_listing_t;
 
 typedef struct {
 	client_mode_t mode;
@@ -428,12 +444,22 @@ void chess_client_moveundone(chess_client_t* client) {
 	undo_move(&client->g);
 }
 
+void chess_client_gamelist_free(chess_client_t* client) {
+	vector_iterator gl_iter = vector_iterate(&client->game_list);
+	while (vector_next(&gl_iter)) {
+		game_listing_t* gl = gl_iter.x;
+		drop(gl->name);
+	}
+
+	vector_free(&client->game_list);
+}
+
 mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 	mp_serv_t msg = (mp_serv_t)read_chr(&cur);
 
 	switch (msg) {
 		case mp_game: {
-			read_game(&cur, &client->g, NULL);
+			read_game(&cur, &client->g, NULL, NULL);
 			read_mp_extra(&cur, &client->g.m);
 
 			client->pnum = read_uint(&cur);
@@ -446,6 +472,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 			}
 
 			if (client->mode != mode_multiplayer) {
+				chess_client_gamelist_free(client);
 				chess_client_initgame(client, mode_multiplayer, 0);
 				client->move_cursor = client->g.moves.length;
 			}
@@ -455,19 +482,24 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 		case mp_game_list: {
 			unsigned games = read_uint(&cur);
 			for (unsigned i=0; i<games; i++) {
-				vector_pushcpy(&client->game_list, &(char*){read_str(&cur)});
+				vector_pushcpy(&client->game_list, &(game_listing_t){.full=read_chr(&cur), .name=read_str(&cur)});
 			}
 
 			break;
 		}
 		case mp_game_list_new: {
-			char* g_name = read_str(&cur);
-			vector_pushcpy(&client->game_list, &g_name);
+			vector_pushcpy(&client->game_list, &(game_listing_t){.full=read_chr(&cur), .name=read_str(&cur)});
 			break;
 		}
 		case mp_game_list_removed: {
-			drop(vector_removeptr(&client->game_list, read_uint(&cur)));
+			game_listing_t* gl = vector_get(&client->game_list, read_uint(&cur));
+			drop(gl->name);
+			vector_remove_element(&client->game_list, gl);
 			break;
+		}
+		case mp_game_list_full: {
+			game_listing_t* gl = vector_get(&client->game_list, read_uint(&cur));
+			gl->full = read_chr(&cur);
 		}
 		case mp_game_joined: {
 			unsigned player = read_uint(&cur);
@@ -564,12 +596,12 @@ void chess_client_undo_move(chess_client_t* client) {
 }
 
 void chess_client_gamelist(chess_client_t* client) {
-	client->game_list = vector_new(sizeof(char*));
+	client->game_list = vector_new(sizeof(game_listing_t));
 	client_send(client->net, &(vector_t){.data=(char[]){mp_list_game}, .length=1});
 }
 
 void chess_client_makegame(chess_client_t* client, char* g_name, char* name) {
-	vector_free_strings(&client->game_list); //free here, in joingame, free at mp_game in case of full
+	chess_client_gamelist_free(client);
 
 	player_t* t = vector_get(&client->g.players, client->player);
 	t->joined = 1;
@@ -617,6 +649,6 @@ void chess_client_leavegame(chess_client_t* client) {
 
 void chess_client_disconnect(chess_client_t* client) {
 	client_free(client->net);
-	vector_free_strings(&client->game_list);
+	chess_client_gamelist_free(client);
 	client->net = NULL;
 }

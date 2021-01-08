@@ -46,7 +46,7 @@ typedef struct __attribute__ ((__packed__)) {
 
 typedef struct {
 	int board_rot;
-	char check, mate;
+	char check, mate, last_mate;
 	char ai;
 
 	vector_t kings;
@@ -617,12 +617,13 @@ void next_player(game_t* g) {
 	} while (t_next->mate);
 }
 
-void update_checks_mates(game_t* g) {
+void update_checks_mates(game_t* g, int undo) {
 	vector_iterator t_iter = vector_iterate(&g->players);
 	while (vector_next(&t_iter)) {
 		player_t* t = t_iter.x;
+		if (!undo) t->last_mate = t->mate;
 
-		if (!t->mate && player_check(g, (char)(t_iter.i), t)) {
+		if (!t->last_mate && player_check(g, (char)(t_iter.i), t)) {
 			t->check=1;
 			t->mate=1;
 
@@ -684,7 +685,7 @@ enum {
 		unmove_swap(g, m);
 	}
 
-	update_checks_mates(g);
+	update_checks_mates(g, 0);
 
 	if (!t->ai) {
 		g->last_player = g->player;
@@ -704,7 +705,7 @@ void undo_move(game_t* g) {
 	g->last_player=-1;
 	g->won=0;
 
-	update_checks_mates(g);
+	update_checks_mates(g, 1);
 }
 
 game_t parse_board(char* str, game_flags_t flags) {

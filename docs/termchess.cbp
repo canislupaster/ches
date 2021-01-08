@@ -5,7 +5,7 @@
 		<Option title="termchess"/>
 		<Option makefile_is_custom="1"/>
 		<Option compiler="clang"/>
-		<Option virtualFolders="CMake Files\;CMake Files\corecommon\;CMake Files\..\;CMake Files\..\..\;CMake Files\..\..\..\;CMake Files\..\..\..\..\;CMake Files\..\..\..\..\usr\;CMake Files\..\..\..\..\usr\local\;CMake Files\..\..\..\..\usr\local\Cellar\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\Modules\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\Modules\Platform\;CMake Files\src\;"/>
+		<Option virtualFolders="CMake Files\;CMake Files\corecommon\;CMake Files\..\;CMake Files\..\..\;CMake Files\..\..\..\;CMake Files\..\..\..\..\;CMake Files\..\..\..\..\usr\;CMake Files\..\..\..\..\usr\local\;CMake Files\..\..\..\..\usr\local\Cellar\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\Modules\;CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\Modules\Platform\;CMake Files\res\;"/>
 		<Build>
 			<Target title="all">
 				<Option working_dir="/Users/thomasmarlowe/Documents/termchess/cmake-build-emscripten"/>
@@ -180,6 +180,7 @@
 				<Option type="1"/>
 				<Option compiler="clang"/>
 				<Compiler>
+					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -208,6 +209,7 @@
 				<Option type="1"/>
 				<Option compiler="clang"/>
 				<Compiler>
+					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -236,6 +238,7 @@
 				<Option type="2"/>
 				<Option compiler="clang"/>
 				<Compiler>
+					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -264,6 +267,7 @@
 				<Option type="2"/>
 				<Option compiler="clang"/>
 				<Compiler>
+					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -446,8 +450,14 @@
 		<Unit filename="/Users/thomasmarlowe/Documents/termchess/../../../../usr/local/Cellar/emscripten/2.0.10/libexec/cmake/Modules/Platform/Emscripten.cmake">
 			<Option virtualFolder="CMake Files\..\..\..\..\usr\local\Cellar\emscripten\2.0.10\libexec\cmake\Modules\Platform\"/>
 		</Unit>
-		<Unit filename="/Users/thomasmarlowe/Documents/termchess/src/index.html">
-			<Option virtualFolder="CMake Files\src\"/>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/res/boardformat.html">
+			<Option virtualFolder="CMake Files\res\"/>
+		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/res/index.html">
+			<Option virtualFolder="CMake Files\res\"/>
+		</Unit>
+		<Unit filename="/Users/thomasmarlowe/Documents/termchess/res/main.css">
+			<Option virtualFolder="CMake Files\res\"/>
 		</Unit>
 	</Project>
 </CodeBlocks_project_file>

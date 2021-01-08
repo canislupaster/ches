@@ -9,6 +9,8 @@ typedef enum {
 	mode_multiplayer,
 } client_mode_t;
 #define MP_PORT 1093
+#define PLAYERNAME_MAXLEN 20
+#define GAMENAME_MAXLEN 20
 typedef enum {
 	mp_list_game, //nothing
 	mp_make_game, //game name, players, board
@@ -21,9 +23,9 @@ typedef enum {
 typedef enum {
 	mp_game_list, //unsigned games, game names
 	mp_game_list_new, //game name
+	mp_game_list_full,
 	mp_game_list_removed, //unsigned game
 
-	mp_game_full,
 	mp_game_made,
 
 	mp_game, //players, board, moves, player #
@@ -41,8 +43,12 @@ void write_move(vector_t* data, move_t* m);
 #include "network.h"
 move_t read_move(cur_t* cur);
 void write_game(vector_t* data, game_t* g);
-void read_game(cur_t* cur, game_t* g, char* joined);
+void read_game(cur_t* cur, game_t* g, char* joined, char* full);
 void mp_extra_free(mp_extra_t* m);
+typedef struct {
+	char full;
+	char* name;
+} game_listing_t;
 typedef struct {
 	client_mode_t mode;
 
