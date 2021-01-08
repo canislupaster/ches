@@ -180,7 +180,6 @@
 				<Option type="1"/>
 				<Option compiler="clang"/>
 				<Compiler>
-					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -209,7 +208,6 @@
 				<Option type="1"/>
 				<Option compiler="clang"/>
 				<Compiler>
-					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -238,7 +236,6 @@
 				<Option type="2"/>
 				<Option compiler="clang"/>
 				<Compiler>
-					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
@@ -267,7 +264,6 @@
 				<Option type="2"/>
 				<Option compiler="clang"/>
 				<Compiler>
-					<Add option="-DBUILD_DEBUG"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/SDL"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/include/libcxx"/>
 					<Add directory="/usr/local/Cellar/emscripten/2.0.10/libexec/system/lib/libcxxabi/include"/>
