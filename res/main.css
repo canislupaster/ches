@@ -19,7 +19,7 @@ body {
     justify-content: center;
 }
 
-p, code, pre, textarea {
+p, code, pre {
     max-width: 30em;
 }
 
@@ -54,6 +54,7 @@ textarea {
     margin: 10px;
     resize: vertical;
     min-height: 30vh;
+    width: 25em;
 }
 
 select[multiple] {
