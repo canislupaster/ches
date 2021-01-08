@@ -115,12 +115,6 @@ int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_
 
 		b->piece_from = *from;
 		b->piece_to = *to;
-
-		if (piece_owned(to, from->player)) {
-			printf("#2 %s\n", move_pgn(g, &b->m));
-			print_board(g);
-			exit(0);
-		}
 	} else if (enter) { //toggle checks
 		for (char i = 0; i < g->players.length; i++) {
 			vecs->checks[i] ^= b->checks[i];
@@ -169,12 +163,6 @@ int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_
 				piece_moves(g, pmoves->p, &pmoves->moves.vec, 0);
 
 				pmoves->modified[depth] = 1;
-			}
-
-			if (valid_move(g, &(move_t){.from={pmoves->pos[0], pmoves->pos[1]}, .to={b->m.to[0], b->m.to[1]}}, 1)) {
-				if (!pmoves->modified[depth]) {
-					printf("WHAT IN THE GODDAMN FUCK\n");
-				}
 			}
 		}
 
@@ -317,12 +305,6 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 			piece_t* target = board_get(g, m->to);
 
 			int e = piece_edible(target);
-			if (piece_owned(target, g->player)) {
-				printf("#1 %s %u\n", move_pgn(g, m), bdepth);
-				print_board(g);
-				exit(0);
-			}
-
 			if (exchange && !e) {
 				if (!moves) {
 					if (branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, *m, 1, 0))
