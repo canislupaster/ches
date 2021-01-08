@@ -20,6 +20,7 @@ typedef enum {
 	mp_make_game, //game name, players, board
 	mp_join_game, //game id, player name
 	mp_make_move, //move_t
+	mp_ai_move,
 	mp_leave_game, //nothing
 	mp_undo_move
 } mp_client_t;
@@ -36,10 +37,32 @@ typedef enum {
 
 	mp_game_joined, //join
 	mp_move_made, //packed move_t
-	mp_game_left, //unsigned player
+	mp_game_left, //unsigned player, unsigned host (new host)
 
 	mp_move_undone
 } mp_serv_t;
+
+void players_free(game_t* g) {
+	vector_iterator p_iter = vector_iterate(&g->players);
+	while (vector_next(&p_iter)) {
+		player_t* p = p_iter.x;
+		drop(p->name);
+		vector_free(&p->allies);
+		vector_free(&p->kings);
+	}
+
+	vector_free(&g->players);
+}
+
+void game_free(game_t* g) {
+	vector_free(&g->promote_from);
+	vector_free(&g->castleable);
+
+	players_free(g);
+	vector_free(&g->board);
+	vector_free(&g->init_board);
+	vector_free(&g->moves);
+}
 
 void write_players(vector_t* data, game_t* g) {
 	vector_pushcpy(data, &(char){(char)g->players.length});
@@ -66,11 +89,15 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 	if (joined) *joined = -1;
 	g->players = vector_new(sizeof(player_t));
 	char num_players = read_chr(cur);
-	if (num_players==0) cur->err=1;
+	if (num_players<=0) cur->err=1;
 	g->last_player = read_chr(cur);
 	g->player = read_chr(cur);
 
 	for (char i=0; i<num_players; i++) {
+		if (cur->err) {
+			return;
+		}
+
 		player_t* p = vector_push(&g->players);
 		p->board_rot = read_int(cur);
 		p->check = read_chr(cur);
@@ -83,27 +110,40 @@ void read_players(cur_t* cur, game_t* g, char* joined) {
 		p->allies = vector_new(1);
 		char len = read_chr(cur);
 		for (char k=0; k<len; k++) {
+			if (cur->err) {
+				return;
+			}
+
 			char ally = read_chr(cur);
 			vector_pushcpy(&p->allies, &ally);
 		}
+
+		p->kings = vector_new(sizeof(int));
+		vector_pushcpy(&p->kings, &(int){-1});
 	}
 }
 
-void read_spectators(cur_t* cur, mp_extra_t* extra) {
+void read_mp_extra(cur_t* cur, mp_extra_t* extra) {
 	unsigned slen = read_uint(cur);
 	extra->spectators = vector_new(sizeof(char*));
 	for (unsigned i=0; i<slen; i++) {
+		if (cur->err) return;
+
 		char* name = read_str(cur);
 		vector_pushcpy(&extra->spectators, &name);
 	}
+
+	extra->host = read_uint(cur);
 }
 
-void write_spectators(vector_t* data, mp_extra_t* m) {
-	write_uint(data, m->spectators.length);
-	vector_iterator spec_iter = vector_iterate(&m->spectators);
+void write_mp_extra(vector_t* data, mp_extra_t* extra) {
+	write_uint(data, extra->spectators.length);
+	vector_iterator spec_iter = vector_iterate(&extra->spectators);
 	while (vector_next(&spec_iter)) {
 		write_str(data, *(char**)spec_iter.x);
 	}
+
+	write_uint(data, extra->host);
 }
 
 void write_boardvec(vector_t* data, vector_t* board) {
@@ -124,11 +164,13 @@ void write_board(vector_t* data, game_t* g) {
 }
 
 void read_board(cur_t* cur, game_t* g) {
+	g->board = vector_new(sizeof(piece_t));
 	g->board_w = read_int(cur);
 	g->board_h = read_int(cur);
-	g->board = vector_new(sizeof(piece_t));
 
 	for (int i=0; i<g->board_w*g->board_h; i++) {
+		if (cur->err) return;
+
 		piece_t* p = vector_push(&g->board);
 		p->ty = (piece_ty)read_uchr(cur);
 		p->flags = (piece_flags_t)read_uint(cur);
@@ -141,7 +183,7 @@ void read_board(cur_t* cur, game_t* g) {
 				return;
 			}
 
-			pp->king = board_i(g, p);
+			vector_insertcpy(&pp->kings, 0, &(int){board_i(g, p)});
 		}
 	}
 }
@@ -149,6 +191,8 @@ void read_board(cur_t* cur, game_t* g) {
 void read_initboard(cur_t* cur, game_t* g) {
 	g->init_board = vector_new(sizeof(piece_t));
 	for (int i=0; i<g->board_w*g->board_h; i++) {
+		if (cur->err) return;
+
 		piece_t* p = vector_push(&g->init_board);
 		p->ty = (piece_ty)read_uchr(cur);
 		p->flags = (piece_flags_t)read_uint(cur);
@@ -157,6 +201,13 @@ void read_initboard(cur_t* cur, game_t* g) {
 }
 
 void write_move(vector_t* data, move_t* m) {
+	if (m->castle[0]==-1) {
+		write_int(data, -1);
+	} else {
+		write_int(data, m->castle[0]);
+		write_int(data, m->castle[1]);
+	}
+
 	write_int(data, m->from[0]);
 	write_int(data, m->from[1]);
 	write_int(data, m->to[0]);
@@ -164,7 +215,16 @@ void write_move(vector_t* data, move_t* m) {
 }
 
 move_t read_move(cur_t* cur) {
-	return (move_t){.from={read_int(cur), read_int(cur)}, .to={read_int(cur), read_int(cur)}};
+	move_t m;
+
+	m.castle[0]=read_int(cur);
+	if (m.castle[0]!=-1) {
+		m.castle[1]=read_int(cur);
+	}
+
+	m.from[0]=read_int(cur); m.from[1]=read_int(cur);
+	m.to[0]=read_int(cur); m.to[1]=read_int(cur);
+	return m;
 }
 
 void write_moves(vector_t* data, game_t* g) {
@@ -176,21 +236,68 @@ void write_moves(vector_t* data, game_t* g) {
 void read_moves(cur_t* cur, game_t* g) {
 	unsigned moves = read_uint(cur);
 	g->moves = vector_new(sizeof(move_t));
-	for (unsigned i=0; i<moves; i++)
+	for (unsigned i=0; i<moves; i++) {
+		if (cur->err) return;
 		vector_pushcpy(&g->moves, &(move_t[]){read_move(cur)});
+	}
 }
 
-void game_free(game_t* g) {
-	vector_iterator p_iter = vector_iterate(&g->players);
-	while (vector_next(&p_iter)) {
-		player_t* p = p_iter.x;
-		drop(p->name);
+void write_game(vector_t* data, game_t* g) {
+	write_uint(data, (unsigned)g->flags);
+
+	vector_pushcpy(data, &(char){(char)g->promote_from.length});
+	vector_iterator promote_iter = vector_iterate(&g->promote_from);
+	while (vector_next(&promote_iter)) vector_pushcpy(data, promote_iter.x);
+
+	vector_pushcpy(data, &(char){(char)g->promote_to});
+
+	vector_pushcpy(data, &(char){(char)g->castleable.length});
+	vector_iterator castle_iter = vector_iterate(&g->castleable);
+	while (vector_next(&castle_iter)) vector_pushcpy(data, castle_iter.x);
+
+	write_players(data, g);
+	write_board(data, g);
+	write_boardvec(data, &g->init_board);
+	write_moves(data, g);
+}
+
+void read_game(cur_t* cur, game_t* g, char* joined) {
+	g->won=0;
+	g->flags = read_uint(cur);
+
+	g->promote_from = vector_new(1);
+	char pfrom = read_chr(cur);
+	for (char i=0; i<pfrom; i++) {
+		if (cur->err) {
+			vector_free(&g->promote_from);
+			return;
+		}
+
+		vector_pushcpy(&g->promote_from, &(char){read_chr(cur)});
 	}
 
-	vector_free(&g->players);
-	vector_free(&g->board);
-	vector_free(&g->init_board);
-	vector_free(&g->moves);
+	g->promote_to = (piece_ty)read_chr(cur);
+
+	g->castleable = vector_new(1);
+	char castleable = read_chr(cur);
+	for (char i=0; i<castleable; i++) {
+		if (cur->err) {
+			vector_free(&g->promote_from);
+			vector_free(&g->castleable);
+			return;
+		}
+
+		vector_pushcpy(&g->castleable, &(char){read_chr(cur)});
+	}
+
+	read_players(cur, g, joined);
+	read_board(cur, g);
+	read_initboard(cur, g);
+	read_moves(cur, g);
+
+	if (cur->err) {
+		game_free(g);
+	}
 }
 
 void mp_extra_free(mp_extra_t* m) {
@@ -204,6 +311,7 @@ typedef struct {
 
 	game_t g;
 
+	unsigned pnum;
 	char player;
 	unsigned move_cursor;
 	vector_t spectators;
@@ -214,25 +322,8 @@ typedef struct {
 	int recv;
 
 	vector_t hints; //highlight pieces
-	move_t select;
+	struct {int from[2]; int to[2];} select;
 } chess_client_t;
-
-void write_game(vector_t* data, game_t* g) {
-	write_uint(data, (unsigned)g->flags);
-	write_players(data, g);
-	write_board(data, g);
-	write_boardvec(data, &g->init_board);
-	write_moves(data, g);
-}
-
-void read_game(cur_t* cur, game_t* g, char* joined) {
-	g->won=0;
-	g->flags = read_uint(cur);
-	read_players(cur, g, joined);
-	read_board(cur, g);
-	read_initboard(cur, g);
-	read_moves(cur, g);
-}
 
 //run whenever select changes or game update
 void refresh_hints(chess_client_t* client) {
@@ -261,16 +352,31 @@ void chess_client_set_move_cursor(chess_client_t* client, unsigned i) {
 	set_move_cursor(&client->g, &client->move_cursor, i);
 }
 
-void chess_client_ai(chess_client_t* client) {
+int chess_client_ai(chess_client_t* client) {
+	int ret=0;
+	move_t m;
+
 	while (!client->g.won) {
 		player_t* p = vector_get(&client->g.players, client->g.player);
 		if (!p->ai) break;
 
-		ai_make_move(&client->g, NULL);
+		ai_make_move(&client->g, &m);
+		ret=1;
+
+		if (client->mode==mode_multiplayer) {
+			vector_t data = vector_new(1);
+
+			vector_pushcpy(&data, &(char){mp_ai_move});
+			write_move(&data, &m);
+			client_send(client->net, &data);
+
+			vector_free(&data);
+		}
 	}
 
 	client->move_cursor = client->g.moves.length;
 	if (client->mode==mode_singleplayer && !client->g.won) client->player = client->g.player;
+	return ret;
 }
 
 void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make) {
@@ -281,9 +387,12 @@ void chess_client_initgame(chess_client_t* client, client_mode_t mode, char make
 
 		client->spectating = 0;
 		client->g.m.spectators = vector_new(sizeof(char*));
+
+		client->pnum = (unsigned)client->player;
+		client->g.m.host = client->pnum;
 	}
 
-	client->hints = vector_new(sizeof(int[2]));
+	client->hints = vector_new(sizeof(move_t));
 }
 
 void pnum_leave(game_t* g, unsigned pnum) {
@@ -309,15 +418,15 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 	switch (msg) {
 		case mp_game: {
 			read_game(&cur, &client->g, NULL);
-			read_spectators(&cur, &client->g.m);
+			read_mp_extra(&cur, &client->g.m);
 
-			unsigned pnum = read_uint(&cur);
-			if (pnum >= client->g.players.length) {
+			client->pnum = read_uint(&cur);
+			if (client->pnum >= client->g.players.length) {
 				client->spectating=1;
 				client->player=0;
 			} else {
 				client->spectating=0;
-				client->player = (char)pnum;
+				client->player = (char)client->pnum;
 			}
 
 			if (client->mode != mode_multiplayer) {
@@ -361,6 +470,7 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 		case mp_game_left: {
 			unsigned pnum = read_uint(&cur);
 			pnum_leave(&client->g, pnum);
+			client->g.m.host = read_uint(&cur);
 			break;
 		}
 		case mp_move_made: {
@@ -387,19 +497,32 @@ mp_serv_t chess_client_recvmsg(chess_client_t* client, cur_t cur) {
 	return msg;
 }
 
+move_t* client_hint_search(chess_client_t* client, int to[2]) {
+	vector_iterator hint_iter = vector_iterate(&client->hints);
+	while (vector_next(&hint_iter)) {
+		move_t* m = hint_iter.x;
+		if (i2eq(m->to, to) || (m->castle[0]!=-1 && i2eq(m->castle, to))) {
+			return m;
+		}
+	}
+
+	return NULL;
+}
+
 int client_make_move(chess_client_t* client) {
 	if (client->spectating || client->player != client->g.player
 			|| client->move_cursor!=client->g.moves.length) return 0;
 
-	if (vector_search(&client->hints, client->select.to)!=-1) {
-		make_move(&client->g, &client->select, 0, 1, client->player);
+	move_t* m;
+	if ((m=client_hint_search(client, client->select.to))) {
+		make_move(&client->g, m, 0, 1, client->player);
 
 		if (client->mode==mode_multiplayer) {
 			client->move_cursor++;
 
 			vector_t data = vector_new(1);
 			vector_pushcpy(&data, &(char){mp_make_move});
-			write_move(&data, &client->select);
+			write_move(&data, m);
 
 			client_send(client->net, &data);
 			vector_free(&data);
@@ -417,6 +540,8 @@ void chess_client_undo_move(chess_client_t* client) {
 		vector_pushcpy(&data, &(char){mp_undo_move});
 		client_send(client->net, &data);
 		vector_free(&data);
+	} else {
+		client->player = client->g.last_player;
 	}
 
 	chess_client_moveundone(client);

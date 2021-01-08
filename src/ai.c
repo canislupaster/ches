@@ -34,10 +34,6 @@ int maxdepth(unsigned len) {
 	return (char)min(max((int)roundf((log2f(AI_EXPECTEDLEN/(float)len)+1)*AI_BRANCHDEPTH), AI_BRANCHDEPTH), AI_MAXDEPTH);
 }
 
-//take shortest checkmate, no matter depth
-//weights indexed by how deep mate is or how many other players get turn
-//populated to depth or zeroed
-
 typedef struct {
 	move_t m;
 	piece_t piece_from;
@@ -95,7 +91,7 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 	return range * AI_RANGEVAL + piecety_value(p->ty);
 }
 
-#define CHECKMATE_VAL 1000.0f
+#define CHECKMATE_VAL 12.0f
 
 float checkmate_value(game_t* g, move_vecs_t* vecs) {
 	//stalemate, indesirable to either player
@@ -119,6 +115,12 @@ int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_
 
 		b->piece_from = *from;
 		b->piece_to = *to;
+
+		if (piece_owned(to, from->player)) {
+			printf("#2 %s\n", move_pgn(g, &b->m));
+			print_board(g);
+			exit(0);
+		}
 	} else if (enter) { //toggle checks
 		for (char i = 0; i < g->players.length; i++) {
 			vecs->checks[i] ^= b->checks[i];
@@ -133,9 +135,7 @@ int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_
 			char check = (char)player_check(g, player_iter.i, player_iter.x);
 
 			if (check && player_iter.i==b->player) {
-				unmove_noswap(g, &b->m, from, to);
-				*from = b->piece_from;
-				*to = b->piece_to;
+				unmove_noswap(g, &b->m, from, to, b->piece_from, b->piece_to);
 				return 0;
 			}
 
@@ -145,27 +145,43 @@ int branch_init(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth, move_
 	}
 
 	if (enter) {
+		int castle_pos[2];
+		if (b->m.castle[0]!=-1) castle_to_pos(&b->m, castle_pos);
+		int castle_mod = 0;
+
 		vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 		while (vector_next(&pmoves_iter)) {
 			piece_moves_t* pmoves = pmoves_iter.x;
 
 			if (!piece_edible(pmoves->p)) continue;
 
+			if (b->m.castle[0]!=-1) {
+				castle_mod = piece_moves_modified(g, pmoves->p, pmoves->pos, b->m.castle)
+						|| piece_moves_modified(g, pmoves->p, pmoves->pos, castle_pos)
+						|| i2eq(pmoves->pos, castle_pos);
+			}
+
 			//when having >2 players, update moves if check is still ongoing
-			if (pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, &b->m)) {
+			if (pmoves->p==to || piece_moves_modified(g, pmoves->p, pmoves->pos, b->m.to)
+					|| piece_moves_modified(g, pmoves->p, pmoves->pos, b->m.from)
+					|| castle_mod) {
 				vector_clear(&pmoves->moves.vec);
 				piece_moves(g, pmoves->p, &pmoves->moves.vec, 0);
 
 				pmoves->modified[depth] = 1;
+			}
+
+			if (valid_move(g, &(move_t){.from={pmoves->pos[0], pmoves->pos[1]}, .to={b->m.to[0], b->m.to[1]}}, 1)) {
+				if (!pmoves->modified[depth]) {
+					printf("WHAT IN THE GODDAMN FUCK\n");
+				}
 			}
 		}
 
 		next_player(g);
 		vecs->ally = (char)is_ally(vecs->ai_player, vecs->ai_p, g->player);
 	} else {
-		unmove_noswap(g, &b->m, from, to);
-		*from = b->piece_from;
-		*to = b->piece_to;
+		unmove_noswap(g, &b->m, from, to, b->piece_from, b->piece_to);
 	}
 
 	return 1;
@@ -179,15 +195,13 @@ void branch_exit(game_t* g, move_vecs_t* vecs, branch_t* b, unsigned depth) {
 	piece_t* from = board_get(g, b->m.from);
 	piece_t* to = board_get(g, b->m.to);
 
-	unmove_noswap(g, &b->m, from, to);
-
-	*from = b->piece_from;
-	*to = b->piece_to;
+	unmove_noswap(g, &b->m, from, to, b->piece_from, b->piece_to);
 
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
-		if (pmoves->p==from || pmoves->modified[depth]) {
+		if (pmoves->p==from || pmoves->modified[depth]
+				|| (b->m.castle[0]!=-1 && i2eq(pmoves->pos, b->m.castle))) {
 			vector_clear(&pmoves->moves.vec);
 			piece_moves(g, pmoves->p, &pmoves->moves.vec, 0);
 			pmoves->modified[depth] = 0;
@@ -292,28 +306,26 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 	//space to find another move / another branch. there is space for the branch in 3 lines
 	int space = vecs->sbranch->branches.length < vecs->maxdepth && depth+1 < AI_BRANCHDEPTH;
 
-	move_t m;
 	vector_iterator pmoves_iter = vector_iterate(&vecs->moves);
 	while (vector_next(&pmoves_iter)) {
 		piece_moves_t* pmoves = pmoves_iter.x;
 		if (!piece_owned(pmoves->p, g->player)) continue;
 
-		m.from[0] = pmoves->pos[0];
-		m.from[1] = pmoves->pos[1];
-
 		vector_iterator move_iter = vector_iterate(&pmoves->moves.vec);
 		while (vector_next(&move_iter)) {
-			int* pos = move_iter.x;
-
-			m.to[0] = pos[0];
-			m.to[1] = pos[1];
-
-			piece_t* target = board_get(g, pos);
+			move_t* m = move_iter.x;
+			piece_t* target = board_get(g, m->to);
 
 			int e = piece_edible(target);
+			if (piece_owned(target, g->player)) {
+				printf("#1 %s %u\n", move_pgn(g, m), bdepth);
+				print_board(g);
+				exit(0);
+			}
+
 			if (exchange && !e) {
 				if (!moves) {
-					if (branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, m, 1, 0))
+					if (branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, *m, 1, 0))
 						moves=1;
 				}
 
@@ -323,7 +335,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 			float v2 = v;
 			if (e) v2 += piece_value(g, vecs, target);
 
-			if (!branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, m, 1, (char)space))
+			if (!branch_init(g, vecs, vector_get(&vecs->sbranch->branches, bdepth), bdepth, *m, 1, (char)space))
 				continue;
 
 			if (space) {
@@ -422,7 +434,7 @@ void ai_make_move(game_t* g, move_t* out_m) {
 		piece_t* p = board_get(g, pos);
 		piece_moves_t pmoves = {.p=p, .pos={pos[0], pos[1]}};
 		memset(pmoves.modified, 0, AI_MAXDEPTH);
-		pmoves.moves = vector_alloc(vector_new(sizeof(int[2])), 0);
+		pmoves.moves = vector_alloc(vector_new(sizeof(move_t)), 0);
 		piece_moves(g, p, &pmoves.moves.vec, 0);
 
 		len += pmoves.moves.vec.length;

@@ -457,8 +457,9 @@ html_elem_t* html_start_div(html_ui_t* ui, char* id, int list) {
 	return e;
 }
 
-html_elem_t* html_start_select(html_ui_t* ui, char* id) {
+html_elem_t* html_start_select(html_ui_t* ui, char* id, int multiple) {
 	html_elem_t* e = html_elem_new(ui, "select", id, NULL);
+	if (multiple) html_set_attr(e, html_attrib, "multiple", "multiple");
 	html_start(ui, e, 1);
 	return e;
 }
@@ -504,6 +505,10 @@ html_elem_t* html_span(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "span", id, text);
 }
 
+html_elem_t* html_br(html_ui_t* ui) {
+	return html_elem_new(ui, "br", NULL, NULL);
+}
+
 html_elem_t* html_label(html_ui_t* ui, char* id, char* text) {
 	return html_elem_new(ui, "label", id, text);
 }
@@ -518,8 +523,11 @@ html_elem_t* html_a(html_ui_t* ui, char* id, char* text, char* href) {
 	return a;
 }
 
-html_elem_t* html_option(html_ui_t* ui, char* id, char* text) {
-	return html_elem_new(ui, "option", id, text);
+html_elem_t* html_option(html_ui_t* ui, char* text, char* val, int selected) {
+	html_elem_t* e = html_elem_new(ui, "option", NULL, text);
+	if (selected) html_set_attr(e, html_attrib, "selected", NULL);
+	if (val) html_set_attr(e, html_value, NULL, val);
+	return e;
 }
 
 html_elem_t* html_radio(html_ui_t* ui, char* id, char* name, char* val, int checked) {
@@ -569,22 +577,28 @@ char* html_radio_value(char* name) {
 	}, name);
 }
 
-vector_t html_checkboxes_checked(char* name) {
+vector_t html_checkboxes_checked(char* name, int select) {
 	vector_t checked = vector_new(sizeof(char*));
-	MAIN_THREAD_EM_ASM(elems = Array.prototype.slice.call(document.getElementsByName(UTF8ToString($0)));, name);
+	if (select) {
+		html_select_id(name);
+		MAIN_THREAD_EM_ASM(elems = Array.prototype.slice.call(elem.children););
+	} else {
+		MAIN_THREAD_EM_ASM(elems = Array.prototype.slice.call(document.getElementsByName(UTF8ToString($0)));, name);
+	}
 
 	while (1) {
 		char* v = (char*)MAIN_THREAD_EM_ASM_INT({
 			while (elems.length>0) {
 				elem = elems.shift();
-				if (elem.checked) return tocstr(elem.value);
+				if (($0 && elem.selected) || (!$0 && elem.checked))
+					return tocstr(elem.value);
 			}
 
 			return 0;
-		}, name);
+		}, select);
 
 		if (!v) break;
-		else vector_pushcpy(&checked, v);
+		else vector_pushcpy(&checked, &v);
 	}
 
 	return checked;
@@ -597,14 +611,14 @@ int html_checked(char* id) {
 
 char* html_local_get(char* name) {
 	return (char*)MAIN_THREAD_EM_ASM_INT({
-																				 let v = window.localStorage.getItem(UTF8ToString($0));
-																				 if (v==null) return 0;
+		let v = window.localStorage.getItem(UTF8ToString($0));
+		if (v==null) return 0;
 
-																				 let len = lengthBytesUTF8(v)+1;
-																				 let buf = _malloc(len);
-																				 stringToUTF8(v, buf, len);
-																				 return buf;
-																			 }, name);
+		let len = lengthBytesUTF8(v)+1;
+		let buf = _malloc(len);
+		stringToUTF8(v, buf, len);
+		return buf;
+	}, name);
 }
 
 void html_local_set(char* name, char* val) {

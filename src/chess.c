@@ -1,3 +1,6 @@
+#include <math.h>
+#include <string.h>
+
 #include "vector.h"
 #include "hashtable.h"
 #include "network.h"
@@ -17,14 +20,16 @@ typedef enum {
 	p_blocked
 } piece_ty;
 
+char* PIECE_STR[] = {"♚","♛","♜","♝","♞","♟", "A", "C", "H", " ","█"};
+
+char* PIECE_NAME[] = {"King","Queen","Rook","Bishop","Knight","Pawn", "Archibishop", "Chancellor", "Heir/Commoner", " ","█"};
+
 typedef enum {
-	pawn_x = 1,
-	pawn_nx = 2,
-	pawn_y = 4,
-	pawn_ny = 8,
-	pawn_firstmv = 16,
-	pawn_firstmv_swp = 32,
-	pawn_promoted = 64,
+	piece_x = 1,
+	piece_nx = 2,
+	piece_y = 4,
+	piece_ny = 8,
+	piece_firstmv = 16,
 } piece_flags_t;
 
 typedef struct {
@@ -36,6 +41,7 @@ typedef struct {
 typedef struct __attribute__ ((__packed__)) {
 	int from[2];
 	int to[2];
+	int castle[2]; //castle with piece, castle[0] == -1 otherwise (standard procedure...)
 } move_t;
 
 typedef struct {
@@ -43,7 +49,7 @@ typedef struct {
 	char check, mate;
 	char ai;
 
-	int king;
+	vector_t kings;
 	char* name;
 	char joined;
 
@@ -51,15 +57,19 @@ typedef struct {
 } player_t;
 
 typedef enum {
-	game_pawn_promotion=1
+	game_win_by_pieces = 1,
 } game_flags_t;
 
 typedef struct {
 	vector_t spectators;
+	unsigned host;
 } mp_extra_t;
 
 typedef struct {
 	game_flags_t flags;
+	vector_t promote_from;
+	piece_ty promote_to;
+	vector_t castleable;
 
 	int board_w, board_h;
 	vector_t init_board;
@@ -75,8 +85,13 @@ typedef struct {
 	vector_t players;
 
 	piece_t piece_swap; //emulating moves is needed when evaluating possible moves or creating a game tree, maybe later augment into a stack
+	piece_t piece_swap_from; //needed for eg. promotion, pawn_firstmv, etc
 	mp_extra_t m;
 } game_t;
+
+int clamp(int x, int min, int max) {
+	return x<min?min:(x>max?max:x);
+}
 
 int pos_i(game_t* g, int x[2]) {
 	return g->board_w*x[1]+x[0];
@@ -103,8 +118,8 @@ void board_pos(game_t* g, int pos[2], piece_t* ptr) {
 }
 
 void pawn_dir(int dir[2], piece_flags_t flags) {
-	dir[0] = (int)(flags&pawn_x) - (int)(flags&pawn_nx);
-	dir[1] = ((int)(flags&pawn_y) - (int)(flags&pawn_ny))>>2;
+	dir[0] = (int)(flags&piece_x) - (int)(flags&piece_nx);
+	dir[1] = ((int)(flags&piece_y) - (int)(flags&piece_ny)) >> 2;
 }
 
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2])	{
@@ -164,18 +179,13 @@ int is_ally(char p_i, player_t* p, char p2) {
 	return p_i==p2 || memchr(p->allies.data, p2, p->allies.length)!=NULL;
 }
 
-char* piece_str(piece_t* p) {
-	char* pcs[] = {"♚","♛","♜","♝","♞","♟", "A", "C", "H", " ","█"};
-	return pcs[p->ty];
-}
-
 //"debugging"
 void print_board(game_t* g) {
 	vector_iterator board_iter = vector_iterate(&g->board);
 	while (vector_next(&board_iter)) {
 		if (board_iter.i%g->board_w==0) printf("\n");
 		piece_t* p = board_iter.x;
-		printf(" %i%s ", piece_edible(p) ? p->player : 0, piece_str(p));
+		printf(" %i%s ", piece_edible(p) ? p->player : 0, PIECE_STR[p->ty]);
 	}
 
 	printf("\n");
@@ -191,11 +201,10 @@ int piece_long_range(piece_ty ty) {
 }
 
 //valid move, no check check
-int valid_move(game_t* g, move_t* m, int collision) {
+int valid_move_override(game_t* g, piece_t* p, piece_ty override, move_t* m, int collision) {
 	int off[2] = {m->to[0] - m->from[0], m->to[1] - m->from[1]};
 
-	piece_t* p = board_get(g, m->from);
-	switch (p->ty) {
+	switch (override) {
 		case p_blocked:
 		case p_empty: return 0;
 		case p_bishop: {
@@ -203,7 +212,26 @@ int valid_move(game_t* g, move_t* m, int collision) {
 			break;
 		}
 		case p_heir:
-		case p_king: { //TODO: castling
+		case p_king: {
+			if (m->castle[0]!=-1) {
+				piece_t* castle = board_get(g, m->castle);
+				//.
+				//.
+				//.
+				if ((~p->flags & piece_firstmv) || (~castle->flags & piece_firstmv)
+						|| memchr(g->castleable.data, castle->ty, g->castleable.length)==NULL
+						|| (abs(m->castle[0]-m->from[0])<2 && abs(m->castle[1]-m->from[1])<2)
+						|| !piece_owned(castle, p->player)
+						|| m->to[0]!=(m->castle[0]+m->from[0])/2+clamp(m->castle[0]-m->from[0],-1,1)
+						|| m->to[1]!=(m->castle[1]+m->from[1])/2+clamp(m->castle[1]-m->from[1],-1,1))
+					return 0;
+
+				off[0] = m->castle[0]-m->from[0];
+				off[1] = m->castle[1]-m->from[1];
+				collision=1;
+				break;
+			}
+			
 			if (abs(off[0])>1||abs(off[1])>1)
 				return 0;
 			collision=0;
@@ -217,8 +245,8 @@ int valid_move(game_t* g, move_t* m, int collision) {
 		case p_archibishop:
 		case p_knight: {
 			if ((abs(off[1])!=2||abs(off[0])!=1)&&(abs(off[1])!=1||abs(off[0])!=2)) {
-				if ((p->ty==p_chancellor && (off[0]==0 || off[1]==0))
-						|| (p->ty==p_archibishop && abs(off[0])==abs(off[1]))) {
+				if ((override==p_chancellor && (off[0]==0 || off[1]==0))
+						|| (override==p_archibishop && abs(off[0])==abs(off[1]))) {
 					break;
 				} else {
 					return 0;
@@ -239,7 +267,7 @@ int valid_move(game_t* g, move_t* m, int collision) {
 			if (piece_edible(board_get(g, m->to))) {
 				struct pawn_adj adj = pawn_adjacent(dir);
 				if (!i2eq(off, adj.adj[0]) && !i2eq(off, adj.adj[1])) return 0;
-			} else if (p->flags & pawn_firstmv) {
+			} else if (p->flags & piece_firstmv) {
 				if (!i2eq(off, dir) && !i2eq(off, (int[2]){dir[0]*2, dir[1]*2})) return 0;
 			} else if (!i2eq(off, dir)) {
 				return 0;
@@ -268,6 +296,11 @@ int valid_move(game_t* g, move_t* m, int collision) {
 	return 1;
 }
 
+int valid_move(game_t* g, move_t* m, int collision) {
+	piece_t* p = board_get(g, m->from);
+	return valid_move_override(g, p, p->ty, m, collision);
+}
+
 int board_pos_next(game_t* g, int* x) {
 	x[0]++;
 
@@ -285,20 +318,25 @@ int board_pos_next(game_t* g, int* x) {
 //if player is already checked, ensures king is not threatened by all pieces
 //otherwise only long range
 int player_check(game_t* g, char p_i, player_t* player) {
-	move_t mv = {.from={-1,0}};
-	board_pos_i(g, mv.to, player->king);
+	if (g->flags & game_win_by_pieces) return 0;
 
-	while (board_pos_next(g, mv.from)) {
-		piece_t* p = board_get(g, mv.from);
-		if (!is_ally(p_i, player, p->player)) {
-			if (valid_move(g, &mv, 1)) return 1;
+	for (int* king=(int*)player->kings.data; *king!=-1; king++) {
+		move_t mv = {.from={-1,0}};
+		mv.castle[0] = -1;
+		board_pos_i(g, mv.to, *king);
+
+		while (board_pos_next(g, mv.from)) {
+			piece_t* p = board_get(g, mv.from);
+			if (!is_ally(p_i, player, p->player)) {
+				if (valid_move(g, &mv, 1)) return 1;
+			}
 		}
 	}
 
 	return 0;
 }
 
-int pawn_promote(game_t* g, piece_t* p, int pos[2]) {
+int promoteable(game_t* g, piece_t* p, int pos[2]) {
 	int dir[2];
 	pawn_dir(dir, p->flags);
 	//im too lazy to negate this expression and return it directly
@@ -308,31 +346,74 @@ int pawn_promote(game_t* g, piece_t* p, int pos[2]) {
 	else return 1;
 }
 
+void castle_to_pos(move_t* m, int* pos) {
+	pos[0]=(m->castle[0]+m->from[0])/2;
+	pos[1]=(m->castle[1]+m->from[1])/2;
+}
+
 void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to) {
+	if (m->castle[0]!=-1) {
+		int castle_pos[2]; castle_to_pos(m, castle_pos);
+		piece_t* castle = board_get(g, m->castle);
+		piece_t* castle_to = board_get(g, castle_pos);
+
+		*castle_to = *castle;
+		castle->ty=p_empty;
+	}
+
 	*to = *from;
 	from->ty = p_empty;
 
-	//remove swap flags
-	to->flags &= ~(pawn_firstmv_swp | pawn_promoted);
+	player_t* p = vector_get(&g->players, to->player);
 
-	if (to->ty==p_king) {
-		((player_t*)vector_get(&g->players, to->player))->king = board_i(g, to);
-	} else if (to->ty == p_pawn) {
-		if (to->flags & pawn_firstmv) {
-			to->flags ^= pawn_firstmv;
-			to->flags |= pawn_firstmv_swp;
+	if (to->ty==p_king && ~g->flags&game_win_by_pieces) {
+		int* king=(int*)p->kings.data;
+		for (;*king!=-1;king++) {
+			if (*king==pos_i(g, m->from)) {
+				*king = pos_i(g, m->to);
+				break;
+			}
 		}
+	}
 
-		if (g->flags & game_pawn_promotion && pawn_promote(g, to, m->to)) {
-			to->flags |= pawn_promoted;
-			to->ty = p_queen; //knights arent that good anyways
+	if (to->flags & piece_firstmv) {
+		to->flags ^= piece_firstmv;
+	}
+
+	if (promoteable(g, to, m->to) && memchr(g->promote_from.data, to->ty, g->promote_from.length)!=NULL) {
+		to->ty = g->promote_to;
+		if (to->ty==p_king) {
+			*(int*)vector_insert(&p->kings, 0) = pos_i(g, m->to);
 		}
 	}
 }
 
-void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to) {
-	if (to->ty==p_king) {
-		((player_t*)vector_get(&g->players, to->player))->king = pos_i(g, m->from);
+void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to, piece_t from_swap, piece_t to_swap) {
+	if (to->ty==p_king && ~g->flags&game_win_by_pieces) {
+		player_t* p = vector_get(&g->players, to->player);
+		if (from_swap.ty!=p_king) {
+			vector_remove(&p->kings, 0);
+		} else {
+			int* king=(int*)p->kings.data;
+			for (;*king!=-1;king++) {
+				if (*king==pos_i(g, m->to)) {
+					*king = pos_i(g, m->from);
+					break;
+				}
+			}
+		}
+	}
+
+	*from = from_swap;
+	*to = to_swap;
+
+	if (m->castle[0]!=-1) {
+		int castle_pos[2]; castle_to_pos(m, castle_pos);
+		piece_t* castle = board_get(g, m->castle);
+		piece_t* castle_to = board_get(g, castle_pos);
+
+		*castle = *castle_to;
+		castle_to->ty=p_empty;
 	}
 }
 
@@ -341,6 +422,7 @@ void move_swap(game_t* g, move_t* m) {
 	piece_t* to = board_get(g, m->to);
 
 	g->piece_swap = *to;
+	g->piece_swap_from = *from;
 	move_noswap(g, m, from, to);
 }
 
@@ -348,17 +430,11 @@ void unmove_swap(game_t* g, move_t* m) {
 	piece_t* from = board_get(g, m->from);
 	piece_t* to = board_get(g, m->to);
 
-	unmove_noswap(g, m, from, to);
-
-	*from = *to;
-	*to = g->piece_swap;
-
-	if (from->flags & pawn_firstmv_swp) from->flags |= pawn_firstmv;
-	if (from->flags & pawn_promoted) from->ty = p_pawn;
+	unmove_noswap(g, m, from, to, g->piece_swap_from, g->piece_swap);
 }
 
 //this is worse
-void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vector_t* moves) {
+void piece_moves_rec(game_t* g, move_t* m, piece_ty override, piece_t* p, vector_t* moves) {
 	switch (override) {
 		case p_blocked:
 		case p_empty: return;
@@ -367,14 +443,17 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 		case p_queen: {
 			for (int sx=-1; sx<=1; sx++) {
 				for (int sy=-1; sy<=1; sy++) {
-					if ((override==p_bishop && (sy==0 || sx==0)) || (override==p_rook && (sy!=0 && sx!=0))) continue;
+					if ((sx==0&&sy==0)
+							|| (override==p_bishop && (sy==0 || sx==0))
+							|| (override==p_rook && (sy!=0 && sx!=0)))
+						continue;
 
-					int to[2] = {pos[0]+sx, pos[1]+sy};
+					m->to[0]=m->from[0]+sx; m->to[1]=m->from[1]+sy;
 					piece_t* pt;
-					while ((pt=board_get(g, to))) {
-						vector_pushcpy(moves, to);
+					while ((pt=board_get(g, m->to))) {
+						vector_pushcpy(moves, m);
 						if (pt->ty != p_empty) break;
-						to[0] += sx; to[1] += sy;
+						m->to[0] += sx; m->to[1] += sy;
 					}
 				}
 			}
@@ -388,9 +467,37 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 				for (off[1]=-1; off[1]<=1; off[1]++) {
 					if (off[0]==0 && off[1]==0) continue;
 
-					int to[2] = {pos[0]+off[0],pos[1]+off[1]};
-					piece_t* pt = board_get(g, to);
-					if (pt) vector_pushcpy(moves, to);
+					m->to[0]=m->from[0]+off[0]; m->to[1]=m->from[1]+off[1];
+					vector_pushcpy(moves, m);
+				}
+			}
+
+			if (p->flags & piece_firstmv) {
+				for (int sx=-1; sx<=1; sx++) {
+					for (int sy=-1; sy<=1; sy++) {
+						if (sx==0&&sy==0) continue;
+
+						m->to[0]=m->from[0]+sx; m->to[1]=m->from[1]+sy;
+						piece_t* pt;
+						while ((pt=board_get(g, m->to))) {
+							if (pt->ty != p_empty) {
+								if ((abs(m->to[0]-m->from[0])>=2 || abs(m->to[1]-m->from[1])>=2) //king cannot castle with adjacent square
+										&& pt->flags & piece_firstmv && memchr(g->castleable.data, pt->ty, g->castleable.length)!=NULL
+										&& piece_owned(pt, p->player)) {
+									m->castle[0]=m->to[0]; m->castle[1]=m->to[1];
+									m->to[0]=(m->castle[0]+m->from[0])/2+clamp(m->castle[0]-m->from[0],-1,1);
+									m->to[1]=(m->castle[1]+m->from[1])/2+clamp(m->castle[1]-m->from[1],-1,1);
+									vector_pushcpy(moves, m);
+
+									m->castle[0]=-1; //reset
+								}
+
+								break;
+							}
+
+							m->to[0] += sx; m->to[1] += sy;
+						}
+					}
 				}
 			}
 
@@ -399,10 +506,8 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 		case p_knight: {
 			int offs[8][2] = {{1,2}, {2,1}, {-1,2}, {-2,1}, {-1,-2}, {-2,-1}, {1,-2}, {2,-1}};
 			for (int i=0; i<8; i++) {
-				int to[2] = {pos[0]+offs[i][0], pos[1]+offs[i][1]};
-
-				piece_t* pt = board_get(g, to);
-				if (pt) vector_pushcpy(moves, to);
+				m->to[0]=m->from[0]+offs[i][0]; m->to[1]=m->from[1]+offs[i][1];
+				vector_pushcpy(moves, m);
 			}
 			break;
 		}
@@ -411,36 +516,36 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 			pawn_dir(dir, p->flags);
 			struct pawn_adj adj = pawn_adjacent(dir);
 
-			int to1[2] = {pos[0]+dir[0], pos[1]+dir[1]};
-			piece_t* pt1 = board_get(g, to1);
+			m->to[0]=m->from[0]+dir[0]; m->to[1]=m->from[1]+dir[1];
+			piece_t* pt1 = board_get(g, m->to);
 
 			if (pt1 && pt1->ty == p_empty) {
-				vector_pushcpy(moves, to1);
+				vector_pushcpy(moves, m);
 
-				if (p->flags & pawn_firstmv) {
-					int to2[2] = {pos[0]+dir[0]*2, pos[1]+dir[1]*2};
-					piece_t* pt2 = board_get(g, to2);
-					if (pt2 && pt2->ty == p_empty) vector_pushcpy(moves, to2);
+				if (p->flags & piece_firstmv) {
+					m->to[0]+=dir[0]; m->to[1]+=dir[1];
+					piece_t* pt2 = board_get(g, m->to);
+					if (pt2 && pt2->ty == p_empty) vector_pushcpy(moves, m);
 				}
 			}
 
-			int to_adj1[2] = {pos[0]+adj.adj[0][0], pos[1]+adj.adj[0][1]};
-			piece_t* adj1 = board_get(g, to_adj1);
-			if (adj1 && piece_edible(adj1)) vector_pushcpy(moves, to_adj1);
-			int to_adj2[2] = {pos[0]+adj.adj[1][0], pos[1]+adj.adj[1][1]};
-			piece_t* adj2 = board_get(g, to_adj2);
-			if (adj2 && piece_edible(adj2)) vector_pushcpy(moves, to_adj2);
+			m->to[0]=m->from[0]+adj.adj[0][0]; m->to[1]=m->from[1]+adj.adj[0][1];
+			piece_t* adj1 = board_get(g, m->to);
+			if (adj1 && piece_edible(adj1)) vector_pushcpy(moves, m);
+			m->to[0]=m->from[0]+adj.adj[1][0]; m->to[1]=m->from[1]+adj.adj[1][1];
+			piece_t* adj2 = board_get(g, m->to);
+			if (adj2 && piece_edible(adj2)) vector_pushcpy(moves, m);
 
 			break;
 		}
 		case p_archibishop: {
-			piece_moves_rec(g, pos, p_bishop, p, moves);
-			piece_moves_rec(g, pos, p_knight, p, moves);
+			piece_moves_rec(g, m, p_bishop, p, moves);
+			piece_moves_rec(g, m, p_knight, p, moves);
 			break;
 		}
 		case p_chancellor: {
-			piece_moves_rec(g, pos, p_rook, p, moves);
-			piece_moves_rec(g, pos, p_knight, p, moves);
+			piece_moves_rec(g, m, p_rook, p, moves);
+			piece_moves_rec(g, m, p_knight, p, moves);
 			break;
 		}
 	}
@@ -448,28 +553,29 @@ void piece_moves_rec(game_t* g, int pos[2], piece_ty override, piece_t* p, vecto
 
 void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check) {
 	move_t m;
+	m.castle[0]=-1;
 	board_pos(g, m.from, p);
-	piece_moves_rec(g, m.from, p->ty, p, moves);
+	piece_moves_rec(g, &m, p->ty, p, moves);
 
 	player_t* player = vector_get(&g->players, p->player);
 
 	vector_iterator mv_iter = vector_iterate(moves);
 	while (vector_next(&mv_iter)) {
-		int* to = mv_iter.x;
-		piece_t* pt = board_get(g, to);
-		if ((pt->ty != p_empty && is_ally(p->player, player, pt->player)) || pt->ty==p_blocked) {
+		move_t* m2 = mv_iter.x;
+		piece_t* pt = board_get(g, m2->to);
+		if (!pt
+				|| (m2->castle[0]==-1 && pt->ty!=p_empty && is_ally(p->player, player, pt->player))
+				|| pt->ty==p_blocked) {
 			vector_remove(moves, mv_iter.i);
 			mv_iter.i--;
 			continue;
 		}
 
-		m.to[0]=to[0]; m.to[1]=to[1];
-
 		if (!check) continue;
 
-		move_swap(g, &m);
+		move_swap(g, m2);
 		int end = player_check(g, p->player, player);
-		unmove_swap(g, &m);
+		unmove_swap(g, m2);
 
 		if (end) {
 			vector_remove(moves, mv_iter.i);
@@ -478,7 +584,7 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check) {
 	}
 }
 
-int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
+int piece_moves_modified(game_t* g, piece_t* p, int* pos, int* other) {
 	//special case; pawns dont take pieces when colliding, so pos to to is invalid if to is blocking pawn
 	if (p->ty==p_pawn) {
 		int off[2] = {other[0]-pos[0], other[1]-pos[1]};
@@ -487,26 +593,15 @@ int piece_moves_modified_other(game_t* g, piece_t* p, int* pos, int* other) {
 		pawn_dir(dir, p->flags);
 		struct pawn_adj adj = pawn_adjacent(dir);
 		return i2eq(off, adj.adj[0]) || i2eq(off, adj.adj[1]) || i2eq(off, dir)
-					|| (p->flags & pawn_firstmv && i2eq(off, (int[2]){dir[0]*2, dir[1]*2}));
+					|| (p->flags & piece_firstmv && i2eq(off, (int[2]){dir[0]*2, dir[1]*2}));
 	}
 
 	move_t m = {.from={pos[0], pos[1]}, .to={other[0], other[1]}};
-
-	if (!piece_long_range(p->ty)) {
-		if (is_ally(p->player, vector_get(&g->players, p->player), board_get(g, other)->player)) {
-			return valid_move(g, &m, 1);
-		} else {
-			return 0;
-		}
-	}
+	m.castle[0]=-1;
 
 	//is this seriously faster than just repeating piece_moves
 	//update: yes
-	return valid_move(g, &m, 1);
-}
-
-int piece_moves_modified(game_t* g, piece_t* p, int pos[2], move_t* m) {
-	return piece_moves_modified_other(g, p, pos, m->from) || piece_moves_modified_other(g, p, pos, m->to);
+	return valid_move_override(g, p, p->ty==p_king?p_queen:p->ty, &m, 1); //override king to collide as a queen for castling
 }
 
 void next_player(game_t* g) {
@@ -533,7 +628,7 @@ void update_checks_mates(game_t* g) {
 			t->check=1;
 			t->mate=1;
 
-			vector_t moves = vector_new(sizeof(int[2]));
+			vector_t moves = vector_new(sizeof(move_t));
 			vector_iterator board_iter = vector_iterate(&g->board);
 			while (vector_next(&board_iter)) {
 				piece_t* p = board_iter.x;
@@ -572,7 +667,8 @@ enum {
 	piece_t* to = board_get(g, m->to);
 
 	if (validate) {
-		if (!to || to->ty == p_blocked || (to->ty != p_empty && is_ally(player, t, to->player)))
+		if (!to || to->ty == p_blocked
+				|| (m->castle[0]==-1 && to->ty != p_empty && is_ally(player, t, to->player)))
 			return move_invalid;
 		if (!valid_move(g, m, 1)) return move_invalid;
 	}
@@ -613,11 +709,7 @@ void undo_move(game_t* g) {
 	update_checks_mates(g);
 }
 
-int clamp(int x, int min, int max) {
-	return x<min?min:(x>=max?(max-1):x);
-}
-
-game_t parse_board(char* str) {
+game_t parse_board(char* str, game_flags_t flags) {
 	game_t g;
 	g.board = vector_new(sizeof(piece_t));
 	g.players = vector_new(sizeof(player_t));
@@ -659,8 +751,11 @@ game_t parse_board(char* str) {
 
 		char* start = str;
 		skip_until(&str, "\n");
-		vector_pushcpy(&g.players, &(player_t){.name=heapcpysubstr(start, str-start),
-				.board_rot=rot, .allies=vector_new(1), .joined=0, .ai=0});
+		player_t* p = vector_pushcpy(&g.players, &(player_t){
+			.name=heapcpysubstr(start, str-start),
+			.board_rot=rot, .joined=0, .ai=0,
+			.allies=vector_new(1), .kings=vector_new(sizeof(int))});
+		vector_pushcpy(&p->kings, &(int){-1}); //sentinel for speed (???)
 		str++;
 	}
 
@@ -694,7 +789,7 @@ game_t parse_board(char* str) {
 		if (str-ws_begin<3 && *str=='\n') continue;
 
 		piece_t* p = vector_push(&g.board);
-		p->flags = 0;
+		p->flags = piece_firstmv;
 		row_wid++;
 
 		if (str-ws_begin==3) {
@@ -713,29 +808,13 @@ game_t parse_board(char* str) {
 		p->player = (char)player;
 
 		switch (*str) {
-			case 'P': {
-				str++;
-				p->ty = p_pawn;
-				if (skip_name(&str, "<")) p->flags=pawn_x|pawn_nx;
-				else if (skip_name(&str, "^")) p->flags=pawn_y|pawn_ny;
-				else if (skip_name(&str, ">")) p->flags=pawn_x;
-				else if (skip_name(&str, "v")) p->flags=pawn_y;
-				else if (skip_name(&str, "↖")) p->flags=pawn_y|pawn_ny|pawn_x|pawn_nx;
-				else if (skip_name(&str, "↗")) p->flags=pawn_y|pawn_ny|pawn_x;
-				else if (skip_name(&str, "↙")) p->flags=pawn_y|pawn_x|pawn_nx;
-				else if (skip_name(&str, "↘")) p->flags=pawn_y|pawn_x;
-
-				p->flags |= pawn_firstmv;
-
-				str--;
-				break;
-			}
 			case 'K': {
 				p->ty = p_king;
 				player_t* t = vector_get(&g.players, p->player);
-				if (t) t->king = (int)g.board.length-1;
+				if (t) vector_insertcpy(&t->kings, 0, &(int){(int)(g.board.length-1)});
 				break;
 			}
+			case 'P': p->ty=p_pawn; break;
 			case 'H': p->ty=p_heir; break;
 			case 'Q': p->ty=p_queen; break;
 			case 'B': p->ty=p_bishop; break;
@@ -747,6 +826,15 @@ game_t parse_board(char* str) {
 		}
 
 		str++;
+
+		if (skip_name(&str, "<")) p->flags|=piece_x|piece_nx;
+		else if (skip_name(&str, "^")) p->flags|=piece_y|piece_ny;
+		else if (skip_name(&str, ">")) p->flags|=piece_x;
+		else if (skip_name(&str, "v")) p->flags|=piece_y;
+		else if (skip_name(&str, "↖")) p->flags|=piece_y|piece_ny|piece_x|piece_nx;
+		else if (skip_name(&str, "↗")) p->flags|=piece_y|piece_ny|piece_x;
+		else if (skip_name(&str, "↙")) p->flags|=piece_y|piece_x|piece_nx;
+		else if (skip_name(&str, "↘")) p->flags|=piece_y|piece_x;
 	}
 
 	vector_cpy(&g.board, &g.init_board);
@@ -754,7 +842,10 @@ game_t parse_board(char* str) {
 	g.last_player = -1;
 	g.player = 0;
 	g.won=0;
-	g.flags=0;
+	g.flags = flags;
+
+	g.promote_from = vector_new(1);
+	g.castleable = vector_new(1);
 
 	vector_iterator p_iter = vector_iterate(&g.players);
 	while (vector_next(&p_iter)) {

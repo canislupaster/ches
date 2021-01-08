@@ -17,6 +17,7 @@ typedef struct {
 	char* name;
 	game_t g;
 	vector_t player_num;
+	unsigned host; //pnum
 } mp_game_t;
 
 void broadcast(chess_server_t* cserv, vector_t* nums, vector_t* data, unsigned num_exclude) {
@@ -45,15 +46,19 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	mp_game_t* mg = *mg_ref;
 
 	int left=0;
+
 	unsigned pnum = 0;
+	unsigned pnum_left=0;
+
 	vector_iterator pnum_iter = vector_iterate(&mg->player_num);
 	while (vector_next(&pnum_iter)) {
 		unsigned* num = pnum_iter.x;
 		if (*num == i) {
 			*num = 0;
 			pnum = pnum_iter.i;
-		} else if (*num>0) {
+		} else if (*num>0 && !left) {
 			left=1;
+			pnum_left = pnum_iter.i;
 		}
 	}
 
@@ -79,8 +84,12 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 	} else {
 		pnum_leave(&mg->g, pnum);
 
+		if (pnum==mg->g.m.host) mg->g.m.host = pnum_left;
+
 		vector_pushcpy(&data, &(char){mp_game_left});
 		write_uint(&data, pnum);
+		write_uint(&data, mg->g.m.host);
+
 		broadcast(cserv, &mg->player_num, &data, 0);
 	}
 	
@@ -125,13 +134,16 @@ int main(int argc, char** argv) {
 				char joined;
 				read_game(&cur, &g, &joined);
 
-				if (cur.err||joined<0) {
+				if (cur.err) {
+					break;
+				} else if (joined<0) {
 					game_free(&g);
 					break;
 				}
 
 				mp_game_t* mg = heapcpy(sizeof(mp_game_t), &(mp_game_t){.g=g, .name=g_name, .player_num=vector_new(sizeof(unsigned))});
 				mg->g.m.spectators = vector_new(sizeof(char*));
+				mg->g.m.host = (unsigned)joined;
 
 				map_insertcpy(&cserv.num_joined, &i, &mg);
 
@@ -198,7 +210,7 @@ int main(int argc, char** argv) {
 				vector_pushcpy(&resp, &(char){mp_game});
 
 				write_game(&resp, &mg->g);
-				write_spectators(&resp, &mg->g.m);
+				write_mp_extra(&resp, &mg->g.m);
 
 				write_uint(&resp, pnum);
 
@@ -212,18 +224,30 @@ int main(int argc, char** argv) {
 				if (!game_in(&cserv, i, &mg, &player) || cur.err) break;
 				if (make_move(&mg->g, &m, 1, 1, (char)player) != move_success) break;
 
-				while (1) {
-					vector_pushcpy(&resp, &(char){mp_move_made});
-					write_move(&resp, &m);
-					broadcast(&cserv, &mg->player_num, &resp, i);
-					vector_clear(&resp);
+				vector_pushcpy(&resp, &(char){mp_move_made});
+				write_move(&resp, &m);
+				broadcast(&cserv, &mg->player_num, &resp, i);
+				vector_clear(&resp);
 
-					player_t* p = vector_get(&mg->g.players, mg->g.player);
-					if (mg->g.won || !p->ai) break;
+				break;
+			}
+			case mp_ai_move: {
+				mp_game_t* mg;
+				unsigned player;
+				move_t m = read_move(&cur);
 
-					ai_make_move(&mg->g, &m);
-					i=0;
-				}
+				if (!game_in(&cserv, i, &mg, &player) || cur.err) break;
+
+				player_t* p = vector_get(&mg->g.players, mg->g.player);
+				if (player!=mg->g.m.host || mg->g.won || !p->ai) break;
+
+				if (make_move(&mg->g, &m, 1, 1, (char)mg->g.player) != move_success) break;
+
+				vector_pushcpy(&resp, &(char){mp_move_made});
+				write_move(&resp, &m);
+				broadcast(&cserv, &mg->player_num, &resp, i);
+
+				vector_clear(&resp);
 
 				break;
 			}
