@@ -14,7 +14,7 @@
         }
 
         window.onunhandledrejection = function (e) {
-            document.body.innerHTML=`<p>i am sorry, mobile user. safari, chrome, and many mobile browsers dislike my webassembly for some reason (invalid section??, listed below), and if you know why and more importantly, how to fix, please tell me (it is probably a bug on their end, as chrome and firefox (desktop) work fine). at least that is what probably happened. the <i>real</i> reason is that </p><code>${e.reason}</code>`;
+            document.body.innerHTML=`<p>i am sorry, mobile/safari user. safari, chrome, and many mobile browsers dislike my webassembly for some reason (invalid section??, listed below), and if you know why and more importantly, how to fix, please tell me (it is probably a bug on their end, as desktop chrome and firefox work fine). at least that is what probably happened. the <i>real</i> reason is that </p><code>${e.reason}</code>`;
         }
     </script>
     <link rel="stylesheet" href="main.css">

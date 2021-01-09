@@ -470,7 +470,8 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				char* b_i = html_input_value("boards");
 				if (streq(b_i, "custom")) {
 					html_textarea(ui, "customboard", boards[1]);
-					html_a(ui, "boardhelp", "board format", "/boardformat.html");
+					html_elem_t* a = html_a(ui, "boardhelp", "board format", "/boardformat.html");
+					html_set_attr(a, html_attrib, "target", "_blank");
 				}
 
 				drop(b_i);

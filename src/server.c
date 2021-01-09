@@ -59,6 +59,12 @@ void leave_game(chess_server_t* cserv, unsigned i) {
 		if (*num == i) {
 			*num = 0;
 			pnum = pnum_iter.i;
+
+			//remove spectators to preserve indices; they arent mapped to g.players
+			if (pnum_iter.i>=mg->g.players.length) {
+				vector_remove(&mg->player_num, pnum_iter.i);
+				pnum_iter.i--;
+			}
 		} else if (*num>0 && !left) {
 			left=1;
 			pnum_left = pnum_iter.i;
