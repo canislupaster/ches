@@ -53,6 +53,7 @@ typedef enum {
 	a_multiplayer,
 	a_singleplayer,
 	a_netmsg,
+	a_disconnected,
 	a_connect,
 	a_makegame_menu,
 	a_chooseplayer,
@@ -75,13 +76,12 @@ void handler(void* arg, cur_t cur) {
 
 	if (cur.start==NULL) {
 		printf("disconnect\n");
-		web->err = "client disconnected";
-		return;
+		html_send(&web->ui, a_disconnected, NULL);
+	} else {
+		mp_serv_t msg = chess_client_recvmsg(&web->client, cur);
+		printf("recv %u\n", msg);
+		html_send(&web->ui, a_netmsg, (void*)msg);
 	}
-
-	mp_serv_t msg = chess_client_recvmsg(&web->client, cur);
-	printf("recv %u\n", msg);
-	html_send(&web->ui, a_netmsg, (void*)msg);
 }
 
 void setup_game(chess_web_t* web) {
@@ -228,6 +228,10 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 			chess_client_gamelist(&web->client);
 
 			web->client.mode = mode_gamelist;
+			break;
+		}
+		case a_disconnected: {
+			web->err = "disconnected from server";
 			break;
 		}
 		case a_makegame_menu: {

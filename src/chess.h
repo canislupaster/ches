@@ -90,7 +90,7 @@ static inline int piece_edible(piece_t* p) {
 	return p->ty != p_empty && p->ty != p_blocked;
 }
 static inline int piece_owned(piece_t* p, char player) {
-	return p->player == player; //used to also check empty and blocked
+	return p->player == player; //previously used to also check empty and blocked
 }
 static inline int is_ally(char p_i, player_t* p, char p2) {
 	return p_i==p2 || memchr(p->allies.data, p2, p->allies.length)!=NULL;
