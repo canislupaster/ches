@@ -83,11 +83,20 @@ int pos_i(game_t* g, int x[2]);
 piece_t* board_get(game_t* g, int x[2]);
 int board_i(game_t* g, piece_t* ptr);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
-int i2eq(int a[2], int b[2]);
-int piece_edible(piece_t* p);
-int piece_owned(piece_t* p, char player);
-int is_ally(char p_i, player_t* p, char p2);
+static inline int i2eq(int a[2], int b[2]) {
+	return a[0]==b[0]&&a[1]==b[1];
+}
+static inline int piece_edible(piece_t* p) {
+	return p->ty != p_empty && p->ty != p_blocked;
+}
+static inline int piece_owned(piece_t* p, char player) {
+	return p->player == player; //used to also check empty and blocked
+}
+static inline int is_ally(char p_i, player_t* p, char p2) {
+	return p_i==p2 || memchr(p->allies.data, p2, p->allies.length)!=NULL;
+}
 void print_board(game_t* g);
+int valid_move(game_t* g, move_t* m, int collision);
 int board_pos_next(game_t* g, int* x);
 int player_check(game_t* g, char p_i, player_t* player);
 void castle_to_pos(move_t* m, int* pos);

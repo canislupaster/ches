@@ -73,6 +73,12 @@ typedef enum {
 void handler(void* arg, cur_t cur) {
 	chess_web_t* web = arg;
 
+	if (cur.start==NULL) {
+		printf("disconnect\n");
+		web->err = "client disconnected";
+		return;
+	}
+
 	mp_serv_t msg = chess_client_recvmsg(&web->client, cur);
 	printf("recv %u\n", msg);
 	html_send(&web->ui, a_netmsg, (void*)msg);
@@ -236,7 +242,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 				web->gname = html_input_value("gname");
 				unsigned len = strlen(web->gname);
 				if (len==0) {
-					web->err="game name is empty. do not skip fields, even if they are many";
+					web->err="game name is empty; if you are not cognizant enough to fill it out, perhaps you are unfit for this game of chess";
 					drop(web->gname); break;
 				} else if (len>GAMENAME_MAXLEN) {
 					web->err = "that game name is too lame. perform a concision.";
@@ -623,7 +629,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_event(ui, p, html_click, a_setmovecursor);
 
 				if (move_iter.i == web->client.move_cursor) {
-					html_set_attr(p, html_attrib, "style", "font-weight:bold;");
+					html_set_attr(p, html_class, NULL, "current");
 				}
 
 				drop(pgn);
@@ -637,6 +643,8 @@ void render(html_ui_t* ui, chess_web_t* web) {
 				html_event(ui, html_button(ui, "undo", "undo"), html_click, a_undo_move);
 
 			html_end(ui);
+
+			move_t* last_m = vector_get(&web->client.g.moves, web->client.g.moves.length-1);
 
 			html_start_table(ui, "board");
 			int pos[2];
@@ -682,10 +690,14 @@ void render(html_ui_t* ui, chess_web_t* web) {
 
 					html_set_attr(td, html_class, NULL, (bpos[0]+bpos[1])%2 ? "dark" : "light");
 
-					if (bpos[0] == web->client.select.from[0] && bpos[1] == web->client.select.from[1]) {
+					if (i2eq(bpos, web->client.select.from)) {
 						html_set_attr(td, html_class, NULL, "selected");
 					} else if (client_hint_search(&web->client, bpos)!=NULL) {
 						html_set_attr(td, html_class, NULL, "hint");
+					} else if (last_m && i2eq(last_m->from, bpos)) {
+						html_set_attr(td, html_class, NULL, "from");
+					} else if (last_m && i2eq(last_m->to, bpos)) {
+						html_set_attr(td, html_class, NULL, "to");
 					}
 
 					html_event(ui, td, html_click, a_select);

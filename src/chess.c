@@ -38,6 +38,8 @@ typedef struct {
 	char player;
 } piece_t;
 
+piece_t PIECE_EMPTY = {.ty=p_empty, .player=-1};
+
 typedef struct __attribute__ ((__packed__)) {
 	int from[2];
 	int to[2];
@@ -163,19 +165,19 @@ struct pawn_adj {int adj[2][2];} pawn_adjacent(int dir[2]) {
 	return (struct pawn_adj){.adj={{not[0]+dir[0],not[1]+dir[1]}, {-not[0]+dir[0],-not[1]+dir[1]}}};
 }
 
-int i2eq(int a[2], int b[2]) {
+static inline int i2eq(int a[2], int b[2]) {
 	return a[0]==b[0]&&a[1]==b[1];
 }
 
-int piece_edible(piece_t* p) {
+static inline int piece_edible(piece_t* p) {
 	return p->ty != p_empty && p->ty != p_blocked;
 }
 
-int piece_owned(piece_t* p, char player) {
-	return p->ty != p_empty && p->ty != p_blocked && p->player == player;
+static inline int piece_owned(piece_t* p, char player) {
+	return p->player == player; //previously used to also check empty and blocked
 }
 
-int is_ally(char p_i, player_t* p, char p2) {
+static inline int is_ally(char p_i, player_t* p, char p2) {
 	return p_i==p2 || memchr(p->allies.data, p2, p->allies.length)!=NULL;
 }
 
@@ -214,6 +216,8 @@ int valid_move_override(game_t* g, piece_t* p, piece_ty override, move_t* m, int
 		case p_heir:
 		case p_king: {
 			if (m->castle[0]!=-1) {
+				if (((player_t*)vector_get(&g->players, p->player))->check) return 0;
+
 				piece_t* castle = board_get(g, m->castle);
 				//.
 				//.
@@ -358,11 +362,11 @@ void move_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to) {
 		piece_t* castle_to = board_get(g, castle_pos);
 
 		*castle_to = *castle;
-		castle->ty=p_empty;
+		*castle = PIECE_EMPTY;
 	}
 
 	*to = *from;
-	from->ty = p_empty;
+	*from = PIECE_EMPTY;
 
 	player_t* p = vector_get(&g->players, to->player);
 
@@ -411,7 +415,7 @@ void unmove_noswap(game_t* g, move_t* m, piece_t* from, piece_t* to, piece_t fro
 		piece_t* castle_to = board_get(g, castle_pos);
 
 		*castle = *castle_to;
-		castle_to->ty=p_empty;
+		*castle_to = PIECE_EMPTY;
 	}
 }
 
@@ -432,7 +436,7 @@ void unmove_swap(game_t* g, move_t* m) {
 }
 
 //this is worse
-void piece_moves_rec(game_t* g, move_t* m, piece_ty override, piece_t* p, vector_t* moves) {
+void piece_moves_rec(game_t* g, move_t* m, piece_ty override, piece_t* p, player_t* player, vector_t* moves) {
 	switch (override) {
 		case p_blocked:
 		case p_empty: return;
@@ -470,7 +474,7 @@ void piece_moves_rec(game_t* g, move_t* m, piece_ty override, piece_t* p, vector
 				}
 			}
 
-			if (p->flags & piece_firstmv) {
+			if (p->flags & piece_firstmv && !player->check) {
 				for (int sx=-1; sx<=1; sx++) {
 					for (int sy=-1; sy<=1; sy++) {
 						if (sx==0&&sy==0) continue;
@@ -537,13 +541,13 @@ void piece_moves_rec(game_t* g, move_t* m, piece_ty override, piece_t* p, vector
 			break;
 		}
 		case p_archibishop: {
-			piece_moves_rec(g, m, p_bishop, p, moves);
-			piece_moves_rec(g, m, p_knight, p, moves);
+			piece_moves_rec(g, m, p_bishop, p, player, moves);
+			piece_moves_rec(g, m, p_knight, p, player, moves);
 			break;
 		}
 		case p_chancellor: {
-			piece_moves_rec(g, m, p_rook, p, moves);
-			piece_moves_rec(g, m, p_knight, p, moves);
+			piece_moves_rec(g, m, p_rook, p, player, moves);
+			piece_moves_rec(g, m, p_knight, p, player, moves);
 			break;
 		}
 	}
@@ -553,16 +557,17 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check) {
 	move_t m;
 	m.castle[0]=-1;
 	board_pos(g, m.from, p);
-	piece_moves_rec(g, &m, p->ty, p, moves);
 
-	player_t* player = vector_get(&g->players, p->player);
+	char p_i = p->player;
+	player_t* player = vector_get(&g->players, p_i);
+	piece_moves_rec(g, &m, p->ty, p, player, moves);
 
 	vector_iterator mv_iter = vector_iterate(moves);
 	while (vector_next(&mv_iter)) {
 		move_t* m2 = mv_iter.x;
 		piece_t* pt = board_get(g, m2->to);
 		if (!pt
-				|| (m2->castle[0]==-1 && pt->ty!=p_empty && is_ally(p->player, player, pt->player))
+				|| (m2->castle[0]==-1 && pt->ty!=p_empty && is_ally(p_i, player, pt->player))
 				|| pt->ty==p_blocked) {
 			vector_remove(moves, mv_iter.i);
 			mv_iter.i--;
@@ -572,7 +577,7 @@ void piece_moves(game_t* g, piece_t* p, vector_t* moves, int check) {
 		if (!check) continue;
 
 		move_swap(g, m2);
-		int end = player_check(g, p->player, player);
+		int end = player_check(g, p_i, player);
 		unmove_swap(g, m2);
 
 		if (end) {
@@ -720,7 +725,6 @@ game_t parse_board(char* str, game_flags_t flags) {
 
 	while (1) {
 		if (skip_name(&str, "\nAlliance\n")) {
-			printf("alliance\n");
 			char* start = str;
 			skip_until(&str, "\n");
 			char* end1 = str++;
@@ -765,12 +769,12 @@ game_t parse_board(char* str, game_flags_t flags) {
 	while (*str) {
 		if (skip_char(&str, '\n')) {
 			for (;row_wid<g.board_w; row_wid++)
-				vector_pushcpy(&g.board, &(piece_t){.ty=p_empty});
+				vector_pushcpy(&g.board, &PIECE_EMPTY);
 
 			if (row_wid>g.board_w) {
 				for (int y=g.board_h; y>0; y--)
 					for (int x=g.board_w; x<row_wid; x++)
-						vector_insertcpy(&g.board, g.board_w*y, &(piece_t){.ty=p_empty});
+						vector_insertcpy(&g.board, g.board_w*y, &PIECE_EMPTY);
 
 				g.board_w=row_wid;
 			}
@@ -793,13 +797,13 @@ game_t parse_board(char* str, game_flags_t flags) {
 		row_wid++;
 
 		if (str-ws_begin==3) {
-			p->ty = p_empty;
+			*p = PIECE_EMPTY;
 			continue;
 		}
 
 		if (skip_char(&str, 'O')) {
 			p->ty = p_blocked;
-			p->player=0;
+			p->player=-1;
 			continue;
 		}
 
@@ -854,6 +858,7 @@ game_t parse_board(char* str, game_flags_t flags) {
 		p->check=player_check(&g, p_iter.i, p);
 	}
 
+	print_board(&g);
 	return g;
 }
 

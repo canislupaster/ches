@@ -442,6 +442,7 @@ void chess_client_moveundone(chess_client_t* client) {
 	}
 
 	undo_move(&client->g);
+	refresh_hints(client);
 }
 
 void chess_client_gamelist_free(chess_client_t* client) {

@@ -468,6 +468,13 @@ void client_recv_cb(char* data, unsigned len, void* udata) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void client_close_cb(void* udata) {
+	client_t* client = udata;
+	cur_t c = {.start=NULL};
+	client->cb(client->arg, c);
+}
+
+EMSCRIPTEN_KEEPALIVE
 void client_err_cb(void* udata) {
 	client_t* client = udata;
 	client->err = ECOMM;
@@ -484,7 +491,13 @@ int client_recv_thrd(client_t* client) {
 		if (poll(pfds, 1, NET_TIMEOUT)==0) continue;
 #endif
 
-		cur_t cur = client_recv(client);
+		cur_t cur;
+		if (pfds[0].revents & POLLHUP) {
+			cur.start=NULL;
+		} else {
+			cur = client_recv(client);
+		}
+
 		client->cb(client->arg, cur);
 	}
 
@@ -514,6 +527,10 @@ client_t* client_connect(char* serv, int port, void (*cb)(void*, cur_t), void* a
 
 		 sock.addEventListener("error", (ev) => {
 				 _client_err_cb($1);
+		 });
+
+		 sock.addEventListener("close", (ev) => {
+				_client_close_cb($1);
 		 });
 	}, serv, client);
 
@@ -568,7 +585,11 @@ void client_send(client_t* client, vector_t* d) {
 
 void client_free(client_t* client) {
 #ifdef __EMSCRIPTEN__
-	EM_ASM(sock.close(););
+	EM_ASM({
+		sock.removeEventListener("close", null);
+		sock.close();
+	});
+
 	vector_iterator msg_iter = vector_iterate(&client->msg_buf);
 	while (vector_next(&msg_iter)) {
 		vector_free(msg_iter.x);
