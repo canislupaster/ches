@@ -701,8 +701,8 @@ void render(html_ui_t* ui, chess_web_t* web) {
 						//pawns are unidirectional, so rotation is helpful
 						if (p->ty==p_pawn) {
 							int prot = pawn_rot(p->flags);
-							if (prot!=0) {
-								int rel_rot = prot/2 - t->board_rot;
+							int rel_rot = prot/2 - t->board_rot;
+							if (rel_rot==0) {
 								if (rel_rot<0) rel_rot=4+rel_rot;
 								rel_rot %= 4;
 
