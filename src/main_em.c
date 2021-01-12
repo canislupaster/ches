@@ -7,7 +7,7 @@
 
 #include "imwasm.h"
 
-#define NUM_BOARDS 6
+#define NUM_BOARDS 7
 char* boards[NUM_BOARDS*2] = {
 #include "../include/default.board"
 		,
@@ -20,6 +20,8 @@ char* boards[NUM_BOARDS*2] = {
 #include "../include/capablanca.board"
 		,
 #include "../include/heirchess.board"
+		,
+#include "../include/ultimate.board"
 };
 
 #define DEFAULT_SERVADDR "wss://esochess.net"
@@ -85,10 +87,16 @@ void handler(void* arg, cur_t cur) {
 }
 
 void setup_game(chess_web_t* web) {
-	web->which = 0;
+	web->which=0;
 	web->client.select.from[0] = -1;
 	web->check_displayed = 0;
 	web->mate_change=1;
+}
+
+void clearhints(chess_web_t* web) {
+	vector_clear(&web->client.hints);
+	web->client.select.from[0]=-1;
+	web->which=0;
 }
 
 void web_moved(html_ui_t* ui, chess_web_t* web, int moved) { //move fx
@@ -117,9 +125,6 @@ void web_move(html_ui_t* ui, chess_web_t* web) { //wrapper level=3
 
 		web_moved(ui, web, 1);
 	}
-
-	web->client.select.from[0] = -1;
-	vector_clear(&web->client.hints);
 }
 
 void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
@@ -347,11 +352,12 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 
 			if (web->which==1) {
 				web_move(ui, web);
+				clearhints(web);
 			} else {
 				refresh_hints(&web->client);
+				web->which=1;
 			}
 
-			web->which=!web->which;
 			break;
 		}
 		case a_dragmove: {
@@ -393,6 +399,7 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		}
 		case a_undo_move: {
 			chess_client_undo_move(&web->client);
+			clearhints(web);
 			break;
 		}
 	}
@@ -690,6 +697,24 @@ void render(html_ui_t* ui, chess_web_t* web) {
 						html_set_attr(td, html_class, NULL, class);
 						html_set_attr(img, html_draggable, NULL, NULL);
 						html_event(ui, td, html_drag, a_dragmove);
+
+						//pawns are unidirectional, so rotation is helpful
+						if (p->ty==p_pawn) {
+							int prot = pawn_rot(p->flags);
+							if (prot!=0) {
+								int rel_rot = prot/2 - t->board_rot;
+								if (rel_rot<0) rel_rot=4+rel_rot;
+								rel_rot %= 4;
+
+								rel_rot*=2;
+
+								if (t->board_rot>0 && t->board_rot<3) rel_rot-=prot%2;
+								else rel_rot+=prot%2;
+
+								char* style = heapstr("transform: rotate(-%ideg);", rel_rot*45);
+								html_set_attr(img, html_attrib, "style", style);
+							}
+						}
 					}
 
 					html_set_attr(td, html_class, NULL, (bpos[0]+bpos[1])%2 ? "dark" : "light");

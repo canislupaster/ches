@@ -124,6 +124,23 @@ void pawn_dir(int dir[2], piece_flags_t flags) {
 	dir[1] = ((int)(flags&piece_y) - (int)(flags&piece_ny)) >> 2;
 }
 
+int pawn_rot(piece_flags_t flags) {
+	int rot=0;
+	if (~flags&piece_ny && flags&piece_y) {
+		rot=4;
+		if (flags&piece_nx) rot--;
+		else if (flags&piece_x) rot++;
+	} else if (flags&piece_nx) {
+		rot=2;
+		if (flags&piece_ny) rot--;
+	} else if (flags&piece_x) {
+		rot=6;
+		if (flags&piece_ny) rot++;
+	}
+
+	return rot;
+}
+
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2])	{
 	if (rot%2==1) {
 		pos_out[0] = pos[1];

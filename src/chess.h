@@ -82,6 +82,7 @@ typedef struct {
 int pos_i(game_t* g, int x[2]);
 piece_t* board_get(game_t* g, int x[2]);
 int board_i(game_t* g, piece_t* ptr);
+int pawn_rot(piece_flags_t flags);
 void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2]);
 static inline int i2eq(int a[2], int b[2]) {
 	return a[0]==b[0]&&a[1]==b[1];

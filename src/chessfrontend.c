@@ -346,9 +346,7 @@ void refresh_hints(chess_client_t* client) {
 	piece_t* p = board_get(&client->g, client->select.from);
 	vector_clear(&client->hints);
 	if (!p) return;
-	if (p->player==client->player) {
-		piece_moves(&client->g, p, &client->hints, 1);
-	}
+	piece_moves(&client->g, p, &client->hints, 1);
 }
 
 void set_move_cursor(game_t* g, unsigned* cur, unsigned i) {
@@ -563,7 +561,8 @@ int client_make_move(chess_client_t* client) {
 			|| client->move_cursor!=client->g.moves.length) return 0;
 
 	move_t* m;
-	if ((m=client_hint_search(client, client->select.to))) {
+	piece_t* from = board_get(&client->g, client->select.from);
+	if ((m=client_hint_search(client, client->select.to)) && from->player==client->player) {
 		make_move(&client->g, m, 0, 1, client->player);
 
 		if (client->mode==mode_multiplayer) {
