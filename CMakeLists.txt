@@ -60,7 +60,7 @@ if(EMSCRIPTEN)
         configure_file(${RES} ${CMAKE_SOURCE_DIR}/docs/ COPYONLY)
     endforeach()
 
-    set(EMCC_OPTIONS "SHELL:-s ASYNCIFY -s ASSERTIONS=1")
+    set(EMCC_OPTIONS "SHELL:-s ASYNCIFY")
     target_compile_options(termchess PUBLIC ${EMCC_OPTIONS})
     target_link_options(termchess PUBLIC ${EMCC_OPTIONS} "LINKER:--fatal-warnings")
 

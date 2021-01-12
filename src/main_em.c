@@ -400,6 +400,9 @@ void update(html_ui_t* ui, html_event_t* ev, chess_web_t* web) {
 		case a_undo_move: {
 			chess_client_undo_move(&web->client);
 			clearhints(web);
+
+			web->check_displayed=0;
+
 			break;
 		}
 	}
@@ -658,12 +661,11 @@ void render(html_ui_t* ui, chess_web_t* web) {
 			move_t* last_m = vector_get(&web->client.g.moves, web->client.g.moves.length-1);
 
 			html_start_table(ui, "board");
-			int pos[2];
-			for (pos[1]=0; pos[1]<web->client.g.board_h; pos[1]++) {
-				if (pos[1]>0) html_end(ui);
+			int pos[2] = {0};
+			for (; pos[1]<(t->board_rot%2==1?web->client.g.board_w:web->client.g.board_h); pos[1]++) {
 				html_start_tr(ui);
 
-				for (pos[0]=0; pos[0]<web->client.g.board_w; pos[0]++) {
+				for (pos[0]=0; pos[0]<(t->board_rot%2==1?web->client.g.board_h:web->client.g.board_w); pos[0]++) {
 					int bpos[2];
 					board_rot_pos(&web->client.g, t->board_rot, pos, bpos);
 					piece_t* p = board_get(&web->client.g, bpos);
@@ -682,9 +684,9 @@ void render(html_ui_t* ui, chess_web_t* web) {
 						case p_blocked:img=html_img(ui, NULL, "img/blocked.svg");break;
 						default: {
 							if (col==0) img=html_img(ui, NULL, wpieces[p->ty]);
-							if (col==1) img=html_img(ui, NULL, bpieces[p->ty]);
-							if (col==2) img=html_img(ui, NULL, rpieces[p->ty]);
-							if (col==3) img=html_img(ui, NULL, gpieces[p->ty]);
+							else if (col==1) img=html_img(ui, NULL, bpieces[p->ty]);
+							else if (col==2) img=html_img(ui, NULL, rpieces[p->ty]);
+							else if (col==3) img=html_img(ui, NULL, gpieces[p->ty]);
 						}
 					}
 
@@ -702,7 +704,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 						if (p->ty==p_pawn) {
 							int prot = pawn_rot(p->flags);
 							int rel_rot = prot/2 - t->board_rot;
-							if (rel_rot!=0) {
+							if (rel_rot!=0 || prot%2==1) {
 								if (rel_rot<0) rel_rot=4+rel_rot;
 								rel_rot %= 4;
 
@@ -734,9 +736,10 @@ void render(html_ui_t* ui, chess_web_t* web) {
 
 					html_end(ui);
 				}
+
+				html_end(ui);
 			}
 
-			html_end(ui); //tr
 			html_end(ui); //table
 			html_end(ui); //wrapper
 

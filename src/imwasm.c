@@ -135,19 +135,23 @@ void html_select(html_elem_t* elem) {
 
 void html_render(html_ui_t* ui);
 
-void html_updaterender(html_ui_t* ui, html_event_t* ev) {
-	ui->update(ui, ev, ui->arg);
-	html_render(ui);
-
+EMSCRIPTEN_KEEPALIVE
+void html_run_deferred(html_ui_t* ui) {
 	while (ui->deferred.length) {
-		emscripten_sleep(100); //apparently dom will update with 0 ms, but ~100 ms needed to load images
-
-		ev = vector_get(&ui->deferred, ui->deferred.length-1);
+		html_event_t* ev = vector_get(&ui->deferred, ui->deferred.length-1);
 		ui->update(ui, ev, ui->arg);
 		html_render(ui);
 
 		vector_pop(&ui->deferred);
 	}
+}
+
+void html_updaterender(html_ui_t* ui, html_event_t* ev) {
+	ui->update(ui, ev, ui->arg);
+	html_render(ui);
+
+	//render scripts will be run first, updating the dom before these intensive tasks are performed
+	MAIN_THREAD_EM_ASM(_html_run_deferred($0);, ui);
 }
 
 void html_send(html_ui_t* ui, unsigned action, void* data) {

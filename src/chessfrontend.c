@@ -380,6 +380,7 @@ void set_move_cursor(game_t* g, unsigned* cur, unsigned i) {
 
 void chess_client_set_move_cursor(chess_client_t* client, unsigned i) {
 	set_move_cursor(&client->g, &client->move_cursor, i);
+	refresh_hints(client);
 }
 
 int chess_client_ai(chess_client_t* client) {

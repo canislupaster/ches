@@ -151,11 +151,11 @@ void board_rot_pos(game_t* g, int rot, int pos[2], int pos_out[2])	{
 	}
 
 	if (rot>0 && rot<3) {
-		pos_out[1] = (rot%2==1?g->board_w:g->board_h)-1-pos_out[1];
+		pos_out[1] = g->board_h-1-pos_out[1];
 	}
 
 	if (rot>1) {
-		pos_out[0] = (rot%2==1?g->board_h:g->board_w)-1-pos_out[0];
+		pos_out[0] = g->board_w-1-pos_out[0];
 	}
 }
 
@@ -204,7 +204,7 @@ void print_board(game_t* g) {
 	while (vector_next(&board_iter)) {
 		if (board_iter.i%g->board_w==0) printf("\n");
 		piece_t* p = board_iter.x;
-		printf(" %i%s ", piece_edible(p) ? p->player : 0, PIECE_STR[p->ty]);
+		printf(" %i%s ", piece_edible(p) ? p->player : g->players.length, PIECE_STR[p->ty]);
 	}
 
 	printf("\n");
