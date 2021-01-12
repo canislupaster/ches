@@ -702,7 +702,7 @@ void render(html_ui_t* ui, chess_web_t* web) {
 						if (p->ty==p_pawn) {
 							int prot = pawn_rot(p->flags);
 							int rel_rot = prot/2 - t->board_rot;
-							if (rel_rot==0) {
+							if (rel_rot!=0) {
 								if (rel_rot<0) rel_rot=4+rel_rot;
 								rel_rot %= 4;
 
