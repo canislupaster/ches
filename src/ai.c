@@ -91,7 +91,7 @@ float piece_value(game_t* g, move_vecs_t* vecs, piece_t* p) {
 	return range * AI_RANGEVAL + (is_ally(vecs->ai_player, vecs->ai_p, p->player) ? 1.0f : 0) + piecety_value(p->ty);
 }
 
-#define CHECKMATE_VAL 150.0f
+#define CHECKMATE_VAL 15.0f
 
 float checkmate_value(game_t* g, move_vecs_t* vecs) {
 	//stalemate, indesirable to either player, EXCEPT when win by pieces
@@ -252,12 +252,16 @@ void sbranch_push(move_vecs_t* vecs, branch_t* branches, float v, char keep) {
 	superbranch_t* min=NULL;
 	int replace=0;
 
+	unsigned l = vecs->sbranch->depth+1+len_branches;
+
 	while (vector_next(&sbranch_iter)) {
 		superbranch_t* sb = sbranch_iter.x;
 
 		char ally=1;
 
-		for (unsigned cd=0; cd<sb->branches.length && cd<vecs->sbranch->depth; cd++) {
+		unsigned most = sb->branches.length<l?sb->branches.length:l;
+
+		for (unsigned cd=0; cd<most; cd++) {
 			branch_t* b1 = vector_get(&sb->branches, cd);
 			branch_t* b2 = vector_get(&vecs->sbranch->branches, cd);
 			ally=b1->ally;
@@ -350,11 +354,12 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 				if (depth == 0) {
 					sbranch_push(vecs, subbest, ally ? v2 : -v2, 0);
 				} else if (v2 > gain) {
-					//if the same exchange is possible now, discard
 					best[0] = *b;
-					if (depth+1>=vecs->finddepth
-						&& subbest->piece_to.ty == board_get(g, subbest->m.to)->ty
-						&& valid_move(g, &subbest->m, 1)) {
+					//if the same exchange is possible now (or it isnt), discard
+					if (subbest[0].m.from[0]==-1
+							|| (depth+1>=vecs->finddepth
+									&& subbest->piece_to.ty == board_get(g, subbest->m.to)->ty
+									&& valid_move(g, &subbest[0].m, 1))) {
 
 						best[1].m.from[0] = -1;
 					} else {
@@ -373,7 +378,7 @@ float ai_find_move(move_vecs_t* vecs, game_t* g, float v, int depth, branch_t* b
 				}
 			}
 
-			if (v2 > gain) gain = v2;
+			if (v2>gain) gain=v2;
 		}
 	}
 

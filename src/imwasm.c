@@ -137,12 +137,12 @@ void html_render(html_ui_t* ui);
 
 EMSCRIPTEN_KEEPALIVE
 void html_run_deferred(html_ui_t* ui) {
-	while (ui->deferred.length) {
-		html_event_t* ev = vector_get(&ui->deferred, ui->deferred.length-1);
+	while (ui->deferred.length>0) {
+		html_event_t* ev = vector_popcpy(&ui->deferred);
 		ui->update(ui, ev, ui->arg);
 		html_render(ui);
 
-		vector_pop(&ui->deferred);
+		drop(ev);
 	}
 }
 
@@ -151,7 +151,7 @@ void html_updaterender(html_ui_t* ui, html_event_t* ev) {
 	html_render(ui);
 
 	//render scripts will be run first, updating the dom before these intensive tasks are performed
-	MAIN_THREAD_EM_ASM(_html_run_deferred($0);, ui);
+	MAIN_THREAD_EM_ASM((window.setTimeout(() => _html_run_deferred($0), 100);), ui);
 }
 
 void html_send(html_ui_t* ui, unsigned action, void* data) {
