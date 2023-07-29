@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>esochess</title>
-    <script src="termchess.js" ></script>
+    <link rel="stylesheet" href="main.css">
+    <script src="./termchess.js" ></script>
     <script>
         function loadedUI() {
             document.getElementById("loading").remove();
@@ -17,7 +18,6 @@
             document.body.innerHTML=`<p>i am sorry, mobile/safari user. safari, chrome, and many mobile browsers dislike my webassembly for some reason (invalid section??, listed below), and if you know why and more importantly, how to fix, please tell me (it is probably a bug on their end, as desktop chrome and firefox work fine). at least that is what probably happened. the <i>real</i> reason is that </p><code>${e.reason}</code>`;
         }
     </script>
-    <link rel="stylesheet" href="main.css">
 </head>
 <body>
     <p id="loading" >loading webassembly...</p>
